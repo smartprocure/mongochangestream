@@ -1,4 +1,4 @@
-# MongoDB Change Stream
+# Mongo Change Stream
 
 ```ts
 const redis = new Redis()
