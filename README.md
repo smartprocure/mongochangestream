@@ -9,8 +9,13 @@ restarted. Change streams will likewise resume from the last resume token. See d
 for more info: https://www.mongodb.com/docs/manual/changeStreams/#std-label-change-stream-resume
 
 ```ts
+import { ChangeStreamDocument, MongoClient } from 'mongodb'
+import { default as Redis } from 'ioredis'
+import { initSync } from 'mongochangestream'
+
 const redis = new Redis()
 
+const mongoUrl = 'mongodb+srv://...'
 const client = await MongoClient.connect(mongoUrl)
 const db = client.db('someDb')
 const coll = db.collection('someColl')
