@@ -1,0 +1,12 @@
+{
+  "include": ["**/*"],
+  "compilerOptions": {
+    "outDir": "dist",
+    "module": "NodeNext",
+    "target": "es2022",
+    "strict": true,
+    "esModuleInterop": true,
+    "forceConsistentCasingInFileNames": true,
+    "resolveJsonModule": true
+  }
+}

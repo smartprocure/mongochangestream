@@ -1,0 +1,34 @@
+{
+  "name": "mongochangestream",
+  "version": "0.1.0",
+  "description": "Sync MongoDB collections via change streams into any database",
+  "author": "GovSpend",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "repository": "git://github.com/smartprocure/mongoChangeStream.git",
+  "type": "module",
+  "scripts": {
+    "clean": "rm -rf dist",
+    "build": "npm run clean && tsc --declaration",
+    "build:develop": "tsc --watch",
+    "lint": "eslint src/**"
+  },
+  "keywords": ["mongodb", "mongo", "change", "stream", "sync", "collection"],
+  "license": "ISC",
+  "peerDependencies": {
+    "ioredis": ">= 5.2.2",
+    "mongodb": ">= 4.8.1"
+  },
+  "devDependencies": {
+    "@types/debug": "^4.1.7",
+    "@typescript-eslint/eslint-plugin": "^5.32.0",
+    "eslint": "^8.21.0",
+    "ioredis": "^5.2.2",
+    "mongodb": "^4.8.1",
+    "prettier": "^2.7.1",
+    "typescript": "^4.7.4"
+  },
+  "dependencies": {
+    "debug": "^4.3.4"
+  }
+}
