@@ -1,5 +1,13 @@
 # Mongo Change Stream
 
+Sync a MongoDB collection to any database. Requires Redis for state management.
+An initial scan is performed while change stream events are handled. In order to
+prevent a potential race condition see the strategies section below.
+
+Resumption will take place if the inital sync doesn't complete and the server is
+restarted. Change streams will likewise resume from the last resume token. See docs
+for more info: https://www.mongodb.com/docs/manual/changeStreams/#std-label-change-stream-resume
+
 ```ts
 const redis = new Redis()
 
@@ -18,30 +26,42 @@ await sync.syncCollection(coll, processRecord)
 
 ## Change Stream Strategies
 
-**Elasticsearch**
+### Elasticsearch
 
-Updates
+**Update**
+```
 POST /index/_doc/id
 document
+```
 
-Inserts
+**Insert**
 This will fail if the document already exists.
 
+```
 POST /index/_create/id
 document
+```
 
-Remove
+**Remove**
+```
 DELETE /index/_doc/id
+```
 
-**CrateDB**
+### CrateDB
 
-Updates
+**Update**
+```sql
 INSERT INTO table document ON CONFLICT DO UPDATE SET changedField = someValue
+```
 
-Inserts
+**Insert**
 This will fail if the record already exits due to the primary key.
 
+```sql
 INSERT INTO table document
+```
 
-Remove
+**Remove**
+```sql
 DELETE FROM table WHERE id = someId
+```
