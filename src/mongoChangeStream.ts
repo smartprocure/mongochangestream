@@ -66,6 +66,8 @@ export const initSync = (redis: Redis) => {
     }
     // Record scan complete
     await redis.set(scanCompletedKey, new Date().toString())
+    // Remove last scan id key
+    await redis.del(lastScanIdKey)
     debug('Completed initial scan')
   }
 
