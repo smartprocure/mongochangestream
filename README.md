@@ -36,6 +36,27 @@ const sync = initSync(redis)
 await sync.syncCollection(coll, processRecord)
 ```
 
+Here are the types for the available methods:
+
+```ts
+import { ChangeStreamDocument, Collection, Document } from 'mongodb'
+
+export type WriteRecord = (doc: ChangeStreamDocument) => void | Promise<void>
+
+export type ScanCollection = (
+  collection: Collection,
+  writeRecord: WriteRecord
+) => Promise<void>
+
+export type SyncCollection = (
+  collection: Collection,
+  writeRecord: WriteRecord,
+  pipeline?: Document[]
+) => Promise<void>
+
+export type Reset = (collection: Collection) => Promise<void>
+```
+
 ## Change Stream Strategies
 
 The idea behind these strategies is to prevent overwriting a document with
