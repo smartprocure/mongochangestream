@@ -5,8 +5,10 @@ An initial scan is performed while change stream events are handled. In order to
 prevent a potential race condition see the strategies section below.
 
 Resumption will take place if the inital sync doesn't complete and the server is
-restarted. Change streams will likewise resume from the last resume token. See docs
-for more info: https://www.mongodb.com/docs/manual/changeStreams/#std-label-change-stream-resume
+restarted. Change streams will likewise resume from the last resume token upon server
+restarts. See the official MongoDB docs for more info:
+
+https://www.mongodb.com/docs/manual/changeStreams/#std-label-change-stream-resume
 
 ```ts
 import { ChangeStreamDocument, MongoClient } from 'mongodb'
