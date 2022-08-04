@@ -1,15 +1,15 @@
 import { ChangeStreamDocument, Collection, Document } from 'mongodb'
 
-export type WriteRecord = (doc: ChangeStreamDocument) => void | Promise<void>
+export type ProcessRecord = (doc: ChangeStreamDocument) => void | Promise<void>
 
 export type ScanCollection = (
   collection: Collection,
-  writeRecord: WriteRecord
+  processRecord: ProcessRecord
 ) => Promise<void>
 
 export type SyncCollection = (
   collection: Collection,
-  writeRecord: WriteRecord,
+  processRecord: ProcessRecord,
   pipeline?: Document[]
 ) => Promise<void>
 
