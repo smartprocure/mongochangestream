@@ -4,11 +4,16 @@ Sync a MongoDB collection to any database. Requires Redis for state management.
 An initial scan is performed while change stream events are handled. In order to
 prevent a potential race condition see the strategies section below.
 
-Resumption will take place if the inital sync doesn't complete and the server is
-restarted. Change streams will likewise resume from the last resume token upon server
-restarts. See the official MongoDB docs for more info:
+If the inital scan doesn't complete for any reason (e.g., server restart) the scan
+will resume where it left off. This is deterministic since the collection scan is sorted
+by `_id`. Change streams will likewise resume from the last resume token upon server
+restarts. See the official MongoDB docs for more information on change stream resumption:
 
 https://www.mongodb.com/docs/manual/changeStreams/#std-label-change-stream-resume
+
+WARNING: If the Node process is stopped prior to receiving the initial change event for the
+collection there is a risk that changes to documents that took place while the server
+was restarting would be missed.
 
 ```ts
 import { ChangeStreamDocument, MongoClient } from 'mongodb'
@@ -33,22 +38,34 @@ await sync.syncCollection(coll, processRecord)
 
 ## Change Stream Strategies
 
+The idea behind these strategies is to prevent overwriting a document with
+an out-of-date version of the document. In order to prevent that scenario
+inserts must only succeed if the document doesn't already exist. Likewise,
+updates must be capable of inserting the full document if it doesn't already
+exist (i.e., perform a replace or an upsert).
+
+The initial scan returns a simulated change event document with `operationType`
+set to `insert`. An actual update change event will include the field-level changes
+in addition to the full document after the change.
+
+NOTE: Exceptions are not caught by this library. You must catch them in your
+`processRecord` callback and handle them accordingly. For example, an insert
+that fails due to a primary key already existing in the destination datastore.
+
 ### Elasticsearch
+
+**Insert**
+
+```
+POST /index/_create/id
+...
+```
 
 **Update**
 
 ```
 POST /index/_doc/id
-document
-```
-
-**Insert**
-
-This will fail if the document already exists.
-
-```
-POST /index/_create/id
-document
+...
 ```
 
 **Remove**
@@ -59,27 +76,48 @@ DELETE /index/_doc/id
 
 ### SQL (MySQL, CrateDB)
 
+**Insert**
+
+```sql
+INSERT INTO table ...
+```
+
 **Update**
 
 MySQL
+
 ```sql
-INSERT INTO table document ON DUPLICATE KEY UPDATE changedField = someValue
+INSERT INTO table ... ON DUPLICATE KEY UPDATE changedField = someValue
 ```
+
 CrateDB
-```sql
-INSERT INTO table document ON CONFLICT DO UPDATE SET changedField = someValue
-```
-
-**Insert**
-
-This will fail if the record already exits due to the primary key.
 
 ```sql
-INSERT INTO table document
+INSERT INTO table ... ON CONFLICT DO UPDATE SET changedField = someValue
 ```
 
 **Remove**
 
 ```sql
 DELETE FROM table WHERE id = someId
+```
+
+### MongoDB
+
+**Insert**
+
+```js
+db.collection('someColl').insertOne(...)
+```
+
+**Update**
+
+```js
+db.collection('someColl').replaceOne({_id: ObjectId(...)}, ..., {upsert: true})
+```
+
+**Remove**
+
+```js
+db.collection('someColl').deleteOne({_id: ObjectId(...)})
 ```
