@@ -34,12 +34,14 @@ await sync.syncCollection(coll, processRecord)
 ### Elasticsearch
 
 **Update**
+
 ```
 POST /index/_doc/id
 document
 ```
 
 **Insert**
+
 This will fail if the document already exists.
 
 ```
@@ -48,18 +50,26 @@ document
 ```
 
 **Remove**
+
 ```
 DELETE /index/_doc/id
 ```
 
-### CrateDB
+### SQL (MySQL, CrateDB)
 
 **Update**
+
+MySQL
+```sql
+INSERT INTO table document ON DUPLICATE KEY UPDATE changedField = someValue
+```
+CrateDB
 ```sql
 INSERT INTO table document ON CONFLICT DO UPDATE SET changedField = someValue
 ```
 
 **Insert**
+
 This will fail if the record already exits due to the primary key.
 
 ```sql
@@ -67,6 +77,7 @@ INSERT INTO table document
 ```
 
 **Remove**
+
 ```sql
 DELETE FROM table WHERE id = someId
 ```
