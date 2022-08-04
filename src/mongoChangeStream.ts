@@ -1,6 +1,6 @@
 import { ChangeStreamInsertDocument, Collection, ObjectId } from 'mongodb'
 import changeStreamToIterator from './changeStreamToIterator.js'
-import { ScanCollection, SyncCollection, Reset } from './types.js'
+import { ProcessRecord } from './types.js'
 import _debug from 'debug'
 import type { default as Redis } from 'ioredis'
 
@@ -31,7 +31,10 @@ export const initSync = (redis: Redis) => {
   /**
    * Run initial collection scan.
    */
-  const runInitialScan: ScanCollection = async (collection, processRecord) => {
+  const runInitialScan = async (
+    collection: Collection,
+    processRecord: ProcessRecord
+  ) => {
     debug('Running initial scan')
     // Redis keys
     const { scanCompletedKey, lastScanIdKey } = getKeys(collection)
@@ -73,13 +76,10 @@ export const initSync = (redis: Redis) => {
 
   const defaultOptions = { fullDocument: 'updateLookup' }
 
-  /**
-   * Sync a MongoDB collection.
-   */
-  const syncCollection: SyncCollection = async (
-    collection,
-    processRecord,
-    pipeline = []
+  const processChangeStream = async (
+    collection: Collection,
+    processRecord: ProcessRecord,
+    pipeline: Document[] = []
   ) => {
     // Redis keys
     const { changeStreamTokenKey } = getKeys(collection)
@@ -89,8 +89,6 @@ export const initSync = (redis: Redis) => {
       ? // Resume token found, so set change stream resume point
         { ...defaultOptions, resumeAfter: JSON.parse(token) }
       : defaultOptions
-    // Run the initial scan
-    runInitialScan(collection, processRecord)
     // Get the change stream as an async iterator
     const changeStream = changeStreamToIterator(collection, pipeline, options)
     // Consume the events
@@ -104,17 +102,31 @@ export const initSync = (redis: Redis) => {
       await redis.set(changeStreamTokenKey, JSON.stringify(token))
     }
   }
+  /**
+   * Sync a MongoDB collection.
+   */
+  const syncCollection = (
+    collection: Collection,
+    processRecord: ProcessRecord,
+    pipeline: Document[] = []
+  ) => {
+    // Process the change stream
+    processChangeStream(collection, processRecord, pipeline)
+    // Run the initial scan
+    runInitialScan(collection, processRecord)
+  }
 
   /**
    * Reset Redis state.
    */
-  const reset: Reset = async (collection) => {
+  const reset = async (collection: Collection) => {
     const keys = Object.values(getKeys(collection))
     await redis.del(...keys)
   }
 
   return {
     runInitialScan,
+    processChangeStream,
     syncCollection,
     reset,
   }

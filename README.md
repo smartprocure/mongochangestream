@@ -15,7 +15,7 @@ WARNING: If the Node process is stopped prior to receiving the initial change ev
 collection there is a risk that changes to documents that took place while the server
 was restarting would be missed.
 
-```ts
+```typescript
 import { ChangeStreamDocument, MongoClient } from 'mongodb'
 import { default as Redis } from 'ioredis'
 import { initSync } from 'mongochangestream'
@@ -36,25 +36,38 @@ const sync = initSync(redis)
 await sync.syncCollection(coll, processRecord)
 ```
 
-Here are the types for the available methods:
+Below are the available methods. You can call `runInitialScan` and `processChangeStream`
+separately, but the most straightforward way is to call `syncCollection` which combines
+both functions.
 
-```ts
+The `processChangeStream` method will never complete, but `runInitialScan` will complete
+once it has scanned all documents in the collection.
+
+The `reset` method will delete all relevant keys for a given collection in Redis.
+
+```typescript
 import { ChangeStreamDocument, Collection, Document } from 'mongodb'
 
 export type ProcessRecord = (doc: ChangeStreamDocument) => void | Promise<void>
 
-export type ScanCollection = (
+const runInitialScan = async (
   collection: Collection,
   processRecord: ProcessRecord
-) => Promise<void>
+): Promise<void> => ...
 
-export type SyncCollection = (
+const processChangeStream = async (
   collection: Collection,
   processRecord: ProcessRecord,
-  pipeline?: Document[]
-) => Promise<void>
+  pipeline: Document[] = []
+): Promise<void> => ...
 
-export type Reset = (collection: Collection) => Promise<void>
+const syncCollection = (
+  collection: Collection,
+  processRecord: ProcessRecord,
+  pipeline: Document[] = []
+): void => ...
+
+const reset = async (collection: Collection): Promise<void> => ...
 ```
 
 ## Change Stream Strategies
