@@ -1,3 +1,7 @@
+# 0.3.0
+
+* Batch `runInitialScan`. 
+
 # 0.2.0
 
 * Separate out event stream handling into the `processChangeStream` method.

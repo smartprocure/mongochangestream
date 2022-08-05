@@ -36,23 +36,25 @@ const sync = initSync(redis)
 await sync.syncCollection(coll, processRecord)
 ```
 
-Below are the available methods. You can call `runInitialScan` and `processChangeStream`
-separately, but the most straightforward way is to call `syncCollection` which combines
-both functions.
+Below are the available methods. 
 
 The `processChangeStream` method will never complete, but `runInitialScan` will complete
-once it has scanned all documents in the collection.
+once it has scanned all documents in the collection. `runInitialScan` batches records for
+efficiency.
 
 The `reset` method will delete all relevant keys for a given collection in Redis.
 
 ```typescript
 import { ChangeStreamDocument, Collection, Document } from 'mongodb'
 
-export type ProcessRecord = (doc: ChangeStreamDocument) => void | Promise<void>
+export type ProcessRecord = (
+  doc: ChangeStreamDocument | ChangeStreamDocument[]
+) => void | Promise<void>
 
 const runInitialScan = async (
   collection: Collection,
-  processRecord: ProcessRecord
+  processRecord: ProcessRecord,
+  batchSize = 100
 ): Promise<void> => ...
 
 const processChangeStream = async (
@@ -60,12 +62,6 @@ const processChangeStream = async (
   processRecord: ProcessRecord,
   pipeline: Document[] = []
 ): Promise<void> => ...
-
-const syncCollection = (
-  collection: Collection,
-  processRecord: ProcessRecord,
-  pipeline: Document[] = []
-): void => ...
 
 const reset = async (collection: Collection): Promise<void> => ...
 ```

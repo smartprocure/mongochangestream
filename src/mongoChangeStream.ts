@@ -1,8 +1,9 @@
 import { ChangeStreamInsertDocument, Collection, ObjectId } from 'mongodb'
 import changeStreamToIterator from './changeStreamToIterator.js'
-import { ProcessRecord } from './types.js'
+import { ProcessRecord, ProcessRecords } from './types.js'
 import _debug from 'debug'
 import type { default as Redis } from 'ioredis'
+import { batchQueue } from 'prom-utils'
 
 const debug = _debug('connectors:mongodbChangeStream')
 
@@ -33,7 +34,8 @@ export const initSync = (redis: Redis) => {
    */
   const runInitialScan = async (
     collection: Collection,
-    processRecord: ProcessRecord
+    processRecords: ProcessRecords,
+    batchSize = 100
   ) => {
     debug('Running initial scan')
     // Redis keys
@@ -48,6 +50,15 @@ export const initSync = (redis: Redis) => {
     // Lookup last _id successfully processed
     const lastId = await redis.get(lastScanIdKey)
     debug('Last scan _id %s', lastId)
+    const _processRecords = async (records: ChangeStreamInsertDocument[]) => {
+      // Process batch of records
+      await processRecords(records)
+      // Record last id of the batch
+      const lastId = records[records.length - 1].fullDocument._id.toString()
+      await redis.set(lastScanIdKey, lastId)
+    }
+    // Create queue
+    const queue = batchQueue(_processRecords, batchSize)
     // Query collection
     const cursor = collection
       // Skip ids already processed
@@ -62,11 +73,10 @@ export const initSync = (redis: Redis) => {
         operationType: 'insert',
         ns,
       } as unknown as ChangeStreamInsertDocument
-      // Process record
-      await processRecord(changeStreamDoc)
-      // Record that this document was successfully processed
-      await redis.set(lastScanIdKey, doc._id.toString())
+      await queue.enqueue(changeStreamDoc)
     }
+    // Flush the queue
+    await queue.flush()
     // Record scan complete
     await redis.set(scanCompletedKey, new Date().toString())
     // Remove last scan id key
@@ -102,19 +112,6 @@ export const initSync = (redis: Redis) => {
       await redis.set(changeStreamTokenKey, JSON.stringify(token))
     }
   }
-  /**
-   * Sync a MongoDB collection.
-   */
-  const syncCollection = (
-    collection: Collection,
-    processRecord: ProcessRecord,
-    pipeline: Document[] = []
-  ) => {
-    // Process the change stream
-    processChangeStream(collection, processRecord, pipeline)
-    // Run the initial scan
-    runInitialScan(collection, processRecord)
-  }
 
   /**
    * Reset Redis state.
@@ -127,7 +124,6 @@ export const initSync = (redis: Redis) => {
   return {
     runInitialScan,
     processChangeStream,
-    syncCollection,
     reset,
   }
 }
