@@ -1,3 +1,7 @@
+# 0.5.0
+
+* Pass `QueueOptions` to `runInitialScan`.
+
 # 0.4.0
 
 * Bumped `prom-utils` to latest.

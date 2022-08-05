@@ -3,7 +3,7 @@ import changeStreamToIterator from './changeStreamToIterator.js'
 import { ProcessRecord, ProcessRecords } from './types.js'
 import _debug from 'debug'
 import type { default as Redis } from 'ioredis'
-import { batchQueue } from 'prom-utils'
+import { batchQueue, QueueOptions } from 'prom-utils'
 
 const debug = _debug('mongodbChangeStream')
 
@@ -30,12 +30,12 @@ const getKeys = (collection: Collection) => {
 
 export const initSync = (redis: Redis) => {
   /**
-   * Run initial collection scan.
+   * Run initial collection scan. `options.batchSize` defaults to 500.
    */
   const runInitialScan = async (
     collection: Collection,
     processRecords: ProcessRecords,
-    batchSize = 100
+    options?: QueueOptions
   ) => {
     debug('Running initial scan')
     // Redis keys
@@ -58,7 +58,7 @@ export const initSync = (redis: Redis) => {
       await redis.set(lastScanIdKey, lastId)
     }
     // Create queue
-    const queue = batchQueue(_processRecords, { batchSize })
+    const queue = batchQueue(_processRecords, options)
     // Query collection
     const cursor = collection
       // Skip ids already processed

@@ -54,7 +54,7 @@ export type ProcessRecord = (
 const runInitialScan = async (
   collection: Collection,
   processRecord: ProcessRecord,
-  batchSize = 100
+  options?: QueueOptions
 ): Promise<void> => ...
 
 const processChangeStream = async (
