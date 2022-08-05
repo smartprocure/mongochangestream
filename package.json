@@ -1,6 +1,6 @@
 {
   "name": "mongochangestream",
-  "version": "0.3.0",
+  "version": "0.4.0",
   "description": "Sync MongoDB collections via change streams into any database.",
   "author": "GovSpend",
   "main": "dist/index.js",
@@ -42,6 +42,6 @@
   },
   "dependencies": {
     "debug": "^4.3.4",
-    "prom-utils": "^0.1.0"
+    "prom-utils": "^0.2.0"
   }
 }

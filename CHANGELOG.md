@@ -1,3 +1,7 @@
+# 0.4.0
+
+* Bumped `prom-utils` to latest.
+
 # 0.3.0
 
 * Batch `runInitialScan`. 

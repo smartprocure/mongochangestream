@@ -5,7 +5,7 @@ import _debug from 'debug'
 import type { default as Redis } from 'ioredis'
 import { batchQueue } from 'prom-utils'
 
-const debug = _debug('connectors:mongodbChangeStream')
+const debug = _debug('mongodbChangeStream')
 
 const keyPrefix = 'mongodbChangeStream'
 
@@ -58,7 +58,7 @@ export const initSync = (redis: Redis) => {
       await redis.set(lastScanIdKey, lastId)
     }
     // Create queue
-    const queue = batchQueue(_processRecords, batchSize)
+    const queue = batchQueue(_processRecords, { batchSize })
     // Query collection
     const cursor = collection
       // Skip ids already processed
