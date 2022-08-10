@@ -1,6 +1,7 @@
+import _ from 'lodash/fp.js'
 import { ChangeStreamInsertDocument, Collection, ObjectId } from 'mongodb'
 import changeStreamToIterator from './changeStreamToIterator.js'
-import { ProcessRecord, ProcessRecords } from './types.js'
+import { ProcessRecord, ProcessRecords, SyncOptions } from './types.js'
 import _debug from 'debug'
 import type { default as Redis } from 'ioredis'
 import { batchQueue, QueueOptions } from 'prom-utils'
@@ -28,6 +29,12 @@ const getKeys = (collection: Collection) => {
   }
 }
 
+export const defaultSortField = {
+  field: '_id',
+  serialize: _.toString,
+  deserialize: (x: string) => new ObjectId(x),
+}
+
 export const initSync = (redis: Redis) => {
   /**
    * Run initial collection scan. `options.batchSize` defaults to 500.
@@ -35,9 +42,10 @@ export const initSync = (redis: Redis) => {
   const runInitialScan = async (
     collection: Collection,
     processRecords: ProcessRecords,
-    options?: QueueOptions
+    options?: QueueOptions & SyncOptions
   ) => {
     debug('Running initial scan')
+    const sortField = options?.sortField || defaultSortField
     // Redis keys
     const { scanCompletedKey, lastScanIdKey } = getKeys(collection)
     // Determine if initial scan has already completed
@@ -47,23 +55,30 @@ export const initSync = (redis: Redis) => {
       debug(`Initial scan previously completed on %s`, scanCompleted)
       return
     }
-    // Lookup last _id successfully processed
-    const lastId = await redis.get(lastScanIdKey)
-    debug('Last scan _id %s', lastId)
     const _processRecords = async (records: ChangeStreamInsertDocument[]) => {
       // Process batch of records
       await processRecords(records)
+      const lastDocument = records[records.length - 1].fullDocument
       // Record last id of the batch
-      const lastId = records[records.length - 1].fullDocument._id.toString()
-      await redis.set(lastScanIdKey, lastId)
+      const lastId = _.get(sortField.field, lastDocument)
+      if (lastId) {
+        await redis.set(lastScanIdKey, sortField.serialize(lastId))
+      }
     }
+    // Lookup last id successfully processed
+    const lastId = await redis.get(lastScanIdKey)
+    debug('Last scan id %s', lastId)
     // Create queue
     const queue = batchQueue(_processRecords, options)
     // Query collection
     const cursor = collection
       // Skip ids already processed
-      .find(lastId ? { _id: { $gt: new ObjectId(lastId) } } : {})
-      .sort({ _id: 1 })
+      .find(
+        lastId
+          ? { [sortField.field]: { $gt: sortField.deserialize(lastId) } }
+          : {}
+      )
+      .sort({ [sortField.field]: 1 })
     const ns = { db: collection.dbName, coll: collection.collectionName }
     // Process documents
     for await (const doc of cursor) {

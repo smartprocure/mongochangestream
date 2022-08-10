@@ -1,3 +1,7 @@
+# 0.6.0
+
+* `sortField` option.
+
 # 0.5.0
 
 * Pass `QueueOptions` to `runInitialScan`.
