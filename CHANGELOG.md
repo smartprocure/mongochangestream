@@ -1,6 +1,6 @@
 # 0.6.0
 
-* `sortField` option.
+* `sortField` option for overriding the default sorting field of `_id`.
 
 # 0.5.0
 
