@@ -12,4 +12,5 @@ export interface SyncOptions<T = any> {
     serialize: (x: T) => string
     deserialize: (x: string) => T
   }
+  omit?: string[]
 }

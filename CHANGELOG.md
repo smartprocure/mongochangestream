@@ -1,3 +1,7 @@
+# 0.7.0
+
+* `omit` option for excluding undesired fields.
+
 # 0.6.0
 
 * `sortField` option for overriding the default sorting field of `_id`.

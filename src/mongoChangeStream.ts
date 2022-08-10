@@ -5,6 +5,7 @@ import { ProcessRecord, ProcessRecords, SyncOptions } from './types.js'
 import _debug from 'debug'
 import type { default as Redis } from 'ioredis'
 import { batchQueue, QueueOptions } from 'prom-utils'
+import { setDefaults } from './util.js'
 
 const debug = _debug('mongodbChangeStream')
 
@@ -46,6 +47,7 @@ export const initSync = (redis: Redis) => {
   ) => {
     debug('Running initial scan')
     const sortField = options?.sortField || defaultSortField
+    const omit = options?.omit
     // Redis keys
     const { scanCompletedKey, lastScanIdKey } = getKeys(collection)
     // Determine if initial scan has already completed
@@ -76,7 +78,8 @@ export const initSync = (redis: Redis) => {
       .find(
         lastId
           ? { [sortField.field]: { $gt: sortField.deserialize(lastId) } }
-          : {}
+          : {},
+        omit ? { projection: setDefaults(omit, 0) } : {}
       )
       .sort({ [sortField.field]: 1 })
     const ns = { db: collection.dbName, coll: collection.collectionName }
