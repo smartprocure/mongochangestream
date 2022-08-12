@@ -1,23 +1,23 @@
 import _ from 'lodash/fp.js'
 import { ChangeStreamInsertDocument, Collection, ObjectId } from 'mongodb'
 import changeStreamToIterator from './changeStreamToIterator.js'
-import { ProcessRecord, ProcessRecords, SyncOptions } from './types.js'
+import { ProcessRecord, ProcessRecords, ScanOptions } from './types.js'
 import _debug from 'debug'
 import type { default as Redis } from 'ioredis'
 import { batchQueue, QueueOptions } from 'prom-utils'
 import { setDefaults } from './util.js'
 
-const debug = _debug('mongodbChangeStream')
+const debug = _debug('mongoChangeStream')
 
-const keyPrefix = 'mongodbChangeStream'
+const keyPrefix = 'mongoChangeStream'
 
 const getCollectionKey = (collection: Collection) =>
   `${collection.dbName}:${collection.collectionName}`
 
 /**
- * Get all Redis keys
+ * Get Redis keys used for the given collection.
  */
-const getKeys = (collection: Collection) => {
+export const getKeys = (collection: Collection) => {
   const collectionKey = getCollectionKey(collection)
   const scanPrefix = `${keyPrefix}:${collectionKey}`
   const scanCompletedKey = `${scanPrefix}:initialScanCompletedOn`
@@ -39,11 +39,12 @@ export const defaultSortField = {
 export const initSync = (redis: Redis) => {
   /**
    * Run initial collection scan. `options.batchSize` defaults to 500.
+   * Sorting defaults to `_id`.
    */
   const runInitialScan = async (
     collection: Collection,
     processRecords: ProcessRecords,
-    options?: QueueOptions & SyncOptions
+    options?: QueueOptions & ScanOptions
   ) => {
     debug('Running initial scan')
     const sortField = options?.sortField || defaultSortField
@@ -97,13 +98,14 @@ export const initSync = (redis: Redis) => {
     await queue.flush()
     // Record scan complete
     await redis.set(scanCompletedKey, new Date().toString())
-    // Remove last scan id key
-    await redis.del(lastScanIdKey)
     debug('Completed initial scan')
   }
 
   const defaultOptions = { fullDocument: 'updateLookup' }
 
+  /**
+   * Process MongoDB change stream for the given collection.
+   */
   const processChangeStream = async (
     collection: Collection,
     processRecord: ProcessRecord,
@@ -132,16 +134,25 @@ export const initSync = (redis: Redis) => {
   }
 
   /**
-   * Reset Redis state.
+   * Delete all Redis keys for the given collection.
    */
   const reset = async (collection: Collection) => {
     const keys = Object.values(getKeys(collection))
     await redis.del(...keys)
   }
 
+  /**
+   * Delete completed on key in Redis for the given collection. 
+   */
+  const clearCompletedOn = async (collection: Collection) => {
+    const keys = getKeys(collection)
+    await redis.del(keys.scanCompletedKey)
+  }
+
   return {
     runInitialScan,
     processChangeStream,
     reset,
+    clearCompletedOn,
   }
 }

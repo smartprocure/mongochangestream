@@ -6,7 +6,7 @@ export type ProcessRecords = (
   doc: ChangeStreamInsertDocument[]
 ) => void | Promise<void>
 
-export interface SyncOptions<T = any> {
+export interface ScanOptions<T = any> {
   sortField?: {
     field: string
     serialize: (x: T) => string

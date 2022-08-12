@@ -1,3 +1,10 @@
+# 0.8.0
+
+* Don't delete the last scan id key when initial scan is completed.
+* Allow an initial scan to resume after completion by calling `clearCompletedOn` first.
+* Export `getKeys` fn.
+* Changed Redis key prefix from to `mongoChangeStream`.
+
 # 0.7.0
 
 * `omit` option for excluding undesired fields.
