@@ -1,3 +1,7 @@
+# 0.9.0
+
+* Moved `omit` to `initSync` so that it can be used in the `processChangeStream` pipeline.
+
 # 0.8.0
 
 * Don't delete the last scan id key when initial scan is completed.

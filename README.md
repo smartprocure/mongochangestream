@@ -36,7 +36,7 @@ const sync = initSync(redis)
 await sync.syncCollection(coll, processRecord)
 ```
 
-Below are the available methods. 
+Below are the available methods.
 
 The `processChangeStream` method will never complete, but `runInitialScan` will complete
 once it has scanned all documents in the collection. `runInitialScan` batches records for
@@ -54,13 +54,13 @@ export type ProcessRecord = (
 const runInitialScan = async (
   collection: Collection,
   processRecord: ProcessRecord,
-  options?: QueueOptions
+  options?: QueueOptions & ScanOptions
 ): Promise<void> => ...
 
 const processChangeStream = async (
   collection: Collection,
   processRecord: ProcessRecord,
-  pipeline: Document[] = []
+  pipeline?: Document[]
 ): Promise<void> => ...
 
 const reset = async (collection: Collection): Promise<void> => ...

@@ -5,3 +5,11 @@ export const setDefaults = (keys: string[], val: any) => {
   }
   return obj
 }
+
+export const generatePipelineFromOmit = (omit: string[]) => {
+  const fields = omit.flatMap((field) => [
+    `fullDocument.${field}`,
+    `updateDescription.updatedFields.${field}`,
+  ])
+  return [{ $unset: fields }]
+}

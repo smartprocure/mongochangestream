@@ -1,11 +1,11 @@
 import _ from 'lodash/fp.js'
 import { ChangeStreamInsertDocument, Collection, ObjectId } from 'mongodb'
 import changeStreamToIterator from './changeStreamToIterator.js'
-import { ProcessRecord, ProcessRecords, ScanOptions } from './types.js'
+import { Options, ProcessRecord, ProcessRecords, ScanOptions } from './types.js'
 import _debug from 'debug'
 import type { default as Redis } from 'ioredis'
 import { batchQueue, QueueOptions } from 'prom-utils'
-import { setDefaults } from './util.js'
+import { generatePipelineFromOmit, setDefaults } from './util.js'
 
 const debug = _debug('mongoChangeStream')
 
@@ -36,7 +36,9 @@ export const defaultSortField = {
   deserialize: (x: string) => new ObjectId(x),
 }
 
-export const initSync = (redis: Redis) => {
+export const initSync = (redis: Redis, options?: Options) => {
+  const omit = options?.omit
+  const defaultPipeline = omit ? generatePipelineFromOmit(omit) : []
   /**
    * Run initial collection scan. `options.batchSize` defaults to 500.
    * Sorting defaults to `_id`.
@@ -48,7 +50,6 @@ export const initSync = (redis: Redis) => {
   ) => {
     debug('Running initial scan')
     const sortField = options?.sortField || defaultSortField
-    const omit = options?.omit
     // Redis keys
     const { scanCompletedKey, lastScanIdKey } = getKeys(collection)
     // Determine if initial scan has already completed
@@ -109,7 +110,7 @@ export const initSync = (redis: Redis) => {
   const processChangeStream = async (
     collection: Collection,
     processRecord: ProcessRecord,
-    pipeline: Document[] = []
+    pipeline?: Document[]
   ) => {
     // Redis keys
     const { changeStreamTokenKey } = getKeys(collection)
@@ -120,7 +121,11 @@ export const initSync = (redis: Redis) => {
         { ...defaultOptions, resumeAfter: JSON.parse(token) }
       : defaultOptions
     // Get the change stream as an async iterator
-    const changeStream = changeStreamToIterator(collection, pipeline, options)
+    const changeStream = changeStreamToIterator(
+      collection,
+      pipeline || defaultPipeline,
+      options
+    )
     // Consume the events
     for await (const event of changeStream) {
       debug('Change stream event %O', event)
@@ -142,7 +147,7 @@ export const initSync = (redis: Redis) => {
   }
 
   /**
-   * Delete completed on key in Redis for the given collection. 
+   * Delete completed on key in Redis for the given collection.
    */
   const clearCompletedOn = async (collection: Collection) => {
     const keys = getKeys(collection)

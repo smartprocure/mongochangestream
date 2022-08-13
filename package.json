@@ -1,6 +1,6 @@
 {
   "name": "mongochangestream",
-  "version": "0.8.0",
+  "version": "0.9.0",
   "description": "Sync MongoDB collections via change streams into any database.",
   "author": "GovSpend",
   "main": "dist/index.js",
