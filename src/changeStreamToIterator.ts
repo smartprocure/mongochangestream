@@ -6,7 +6,7 @@ import {
 } from 'mongodb'
 import _debug from 'debug'
 
-const debug = _debug('connectors:mongodbChangeStream')
+const debug = _debug('mongoChangeStream')
 
 const changeStreamToIterator = (
   collection: Collection,
