@@ -1,7 +1,12 @@
 import _ from 'lodash/fp.js'
 import { ChangeStreamInsertDocument, Collection, ObjectId } from 'mongodb'
 import changeStreamToIterator from './changeStreamToIterator.js'
-import { Options, ProcessRecord, ProcessRecords, ScanOptions } from './types.js'
+import {
+  SyncOptions,
+  ProcessRecord,
+  ProcessRecords,
+  ScanOptions,
+} from './types.js'
 import _debug from 'debug'
 import type { default as Redis } from 'ioredis'
 import { batchQueue, QueueOptions } from 'prom-utils'
@@ -36,7 +41,7 @@ export const defaultSortField = {
   deserialize: (x: string) => new ObjectId(x),
 }
 
-export const initSync = (redis: Redis, options?: Options) => {
+export const initSync = (redis: Redis, options?: SyncOptions) => {
   const omit = options?.omit
   const defaultPipeline = omit ? generatePipelineFromOmit(omit) : []
   /**

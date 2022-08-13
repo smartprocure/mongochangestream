@@ -6,7 +6,7 @@ export type ProcessRecords = (
   doc: ChangeStreamInsertDocument[]
 ) => void | Promise<void>
 
-export interface Options {
+export interface SyncOptions {
   omit?: string[]
 }
 

@@ -1,3 +1,7 @@
+# 0.10.0
+
+* Renamed `Options` to `SyncOptions`.
+
 # 0.9.0
 
 * Moved `omit` to `initSync` so that it can be used in the `processChangeStream` pipeline.
