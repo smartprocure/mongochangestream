@@ -1,3 +1,7 @@
+# 0.11.0
+
+* Prepend `pipeline` with omit pipeline if `omit` is passed to `initSync`.
+
 # 0.10.0
 
 * Renamed `Options` to `SyncOptions`.

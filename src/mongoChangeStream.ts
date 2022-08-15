@@ -43,7 +43,7 @@ export const defaultSortField = {
 
 export const initSync = (redis: Redis, options?: SyncOptions) => {
   const omit = options?.omit
-  const defaultPipeline = omit ? generatePipelineFromOmit(omit) : []
+  const omitPipeline = omit ? generatePipelineFromOmit(omit) : []
   /**
    * Run initial collection scan. `options.batchSize` defaults to 500.
    * Sorting defaults to `_id`.
@@ -111,11 +111,13 @@ export const initSync = (redis: Redis, options?: SyncOptions) => {
 
   /**
    * Process MongoDB change stream for the given collection.
+   * If omit is passed to `initSync` a pipeline stage that removes
+   * those fields will be prepended to the `pipeline` argument.
    */
   const processChangeStream = async (
     collection: Collection,
     processRecord: ProcessRecord,
-    pipeline?: Document[]
+    pipeline: Document[] = []
   ) => {
     // Redis keys
     const { changeStreamTokenKey } = getKeys(collection)
@@ -128,7 +130,7 @@ export const initSync = (redis: Redis, options?: SyncOptions) => {
     // Get the change stream as an async iterator
     const changeStream = changeStreamToIterator(
       collection,
-      pipeline || defaultPipeline,
+      [...omitPipeline, ...pipeline],
       options
     )
     // Consume the events
