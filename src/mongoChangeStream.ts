@@ -1,5 +1,10 @@
 import _ from 'lodash/fp.js'
-import { ChangeStreamInsertDocument, Collection, ObjectId } from 'mongodb'
+import {
+  ChangeStreamInsertDocument,
+  Collection,
+  Document,
+  ObjectId,
+} from 'mongodb'
 import changeStreamToIterator from './changeStreamToIterator.js'
 import {
   SyncOptions,

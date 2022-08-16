@@ -1,3 +1,7 @@
+# 0.12.0
+
+* Fix `Document` type.
+
 # 0.11.0
 
 * Prepend `pipeline` with omit pipeline if `omit` is passed to `initSync`.
