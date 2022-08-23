@@ -1,3 +1,7 @@
+# 0.13.0
+
+* Omit nested fields for `update` operations.
+
 # 0.12.0
 
 * Fix `Document` type.

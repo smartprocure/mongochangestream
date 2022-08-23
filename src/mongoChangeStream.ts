@@ -15,7 +15,11 @@ import {
 import _debug from 'debug'
 import type { default as Redis } from 'ioredis'
 import { batchQueue, QueueOptions } from 'prom-utils'
-import { generatePipelineFromOmit, setDefaults } from './util.js'
+import {
+  generatePipelineFromOmit,
+  omitFieldForUpdate,
+  setDefaults,
+} from './util.js'
 
 const debug = _debug('mongoChangeStream')
 
@@ -139,10 +143,15 @@ export const initSync = (redis: Redis, options?: SyncOptions) => {
       options
     )
     // Consume the events
-    for await (const event of changeStream) {
+    for await (let event of changeStream) {
       debug('Change stream event %O', event)
       // Get resume token
       const token = event?._id
+      // Omit nested fields that are not handled by $unset.
+      // For example, if 'a' was omitted then 'a.b.c' should be omitted.
+      if (event.operationType === 'update' && omit) {
+        event = omitFieldForUpdate(omit)(event)
+      }
       // Process record
       await processRecord(event)
       // Update change stream token

@@ -1,3 +1,5 @@
+import _ from 'lodash/fp.js'
+
 export const setDefaults = (keys: string[], val: any) => {
   const obj: Record<string, any> = {}
   for (const key of keys) {
@@ -13,3 +15,11 @@ export const generatePipelineFromOmit = (omit: string[]) => {
   ])
   return [{ $unset: fields }]
 }
+
+export const omitFields = (omitPaths: string[]) =>
+  _.omitBy((val, key) =>
+    _.find((omitPath) => _.startsWith(`${omitPath}.`, key), omitPaths)
+  )
+
+export const omitFieldForUpdate = (omitPaths: string[]) =>
+  _.update('updateDescription.updatedFields', omitFields(omitPaths))
