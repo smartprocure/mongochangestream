@@ -21,7 +21,7 @@ import {
   setDefaults,
 } from './util.js'
 
-const debug = _debug('mongoChangeStream')
+const debug = _debug('mongochangestream')
 
 const keyPrefix = 'mongoChangeStream'
 

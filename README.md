@@ -15,6 +15,12 @@ WARNING: If the Node process is stopped prior to receiving the initial change ev
 collection there is a risk that changes to documents that took place while the server
 was restarting would be missed.
 
+This library uses `debug`. To enable you can do something like:
+
+```
+DEBUG=mongochangestream node myfile.js
+```
+
 ```typescript
 import { ChangeStreamDocument, MongoClient } from 'mongodb'
 import { default as Redis } from 'ioredis'
