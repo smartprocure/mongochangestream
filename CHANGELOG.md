@@ -1,3 +1,7 @@
+# 0.15.0
+
+- Export `getCollectionKey` util.
+
 # 0.14.0
 
 - Bump peer dependencies.

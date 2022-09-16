@@ -1,3 +1,4 @@
+import { Collection } from 'mongodb'
 import _ from 'lodash/fp.js'
 
 export const setDefaults = (keys: string[], val: any) => {
@@ -23,3 +24,6 @@ export const omitFields = (omitPaths: string[]) =>
 
 export const omitFieldForUpdate = (omitPaths: string[]) =>
   _.update('updateDescription.updatedFields', omitFields(omitPaths))
+
+export const getCollectionKey = (collection: Collection) =>
+  `${collection.dbName}:${collection.collectionName}`

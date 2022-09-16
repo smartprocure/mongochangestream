@@ -17,6 +17,7 @@ import type { default as Redis } from 'ioredis'
 import { batchQueue, QueueOptions } from 'prom-utils'
 import {
   generatePipelineFromOmit,
+  getCollectionKey,
   omitFieldForUpdate,
   setDefaults,
 } from './util.js'
@@ -24,9 +25,6 @@ import {
 const debug = _debug('mongochangestream')
 
 const keyPrefix = 'mongoChangeStream'
-
-const getCollectionKey = (collection: Collection) =>
-  `${collection.dbName}:${collection.collectionName}`
 
 /**
  * Get Redis keys used for the given collection.
