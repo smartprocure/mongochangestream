@@ -36,10 +36,16 @@ const coll = db.collection('someColl')
 const processRecord = async (doc: ChangeStreamDocument) => {
   console.dir(doc, { depth: 10 })
 }
+const processRecords = async (docs: ChangeStreamInsertDocument[]) => {
+  console.dir(docs, { depth: 10 })
+}
 
 // Sync collection
 const sync = initSync(redis)
-await sync.syncCollection(coll, processRecord)
+sync.syncCollection(coll, processRecord)
+const changeStream = await sync.processChangeStream(coll, processRecord)
+changeStream.start()
+setTimeout(changeStream.stop, 30000)
 ```
 
 Below are the available methods.
@@ -53,23 +59,23 @@ The `reset` method will delete all relevant keys for a given collection in Redis
 ```typescript
 import { ChangeStreamDocument, Collection, Document } from 'mongodb'
 
-export type ProcessRecord = (
-  doc: ChangeStreamDocument | ChangeStreamDocument[]
+export type ProcessRecord = (doc: ChangeStreamDocument) => void | Promise<void>
+
+export type ProcessRecords = (
+  doc: ChangeStreamInsertDocument[]
 ) => void | Promise<void>
 
 const runInitialScan = async (
   collection: Collection,
-  processRecord: ProcessRecord,
+  processRecords: ProcessRecords,
   options?: QueueOptions & ScanOptions
-): Promise<void> => ...
+)
 
 const processChangeStream = async (
   collection: Collection,
   processRecord: ProcessRecord,
   pipeline?: Document[]
-): Promise<void> => ...
-
-const reset = async (collection: Collection): Promise<void> => ...
+)
 ```
 
 ## Change Stream Strategies

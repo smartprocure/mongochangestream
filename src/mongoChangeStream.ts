@@ -120,12 +120,16 @@ export const initSync = (redis: Redis, options?: SyncOptions) => {
    * Process MongoDB change stream for the given collection.
    * If omit is passed to `initSync` a pipeline stage that removes
    * those fields will be prepended to the `pipeline` argument.
+   *
+   * Call `start` to start processing events and `stop` to close
+   * the change stream.
    */
   const processChangeStream = async (
     collection: Collection,
     processRecord: ProcessRecord,
     pipeline: Document[] = []
   ) => {
+    const abortController = new AbortController()
     // Redis keys
     const { changeStreamTokenKey } = getKeys(collection)
     // Lookup change stream token
@@ -138,23 +142,29 @@ export const initSync = (redis: Redis, options?: SyncOptions) => {
     const changeStream = changeStreamToIterator(
       collection,
       [...omitPipeline, ...pipeline],
+      abortController.signal,
       options
     )
-    // Consume the events
-    for await (let event of changeStream) {
-      debug('Change stream event %O', event)
-      // Get resume token
-      const token = event?._id
-      // Omit nested fields that are not handled by $unset.
-      // For example, if 'a' was omitted then 'a.b.c' should be omitted.
-      if (event.operationType === 'update' && omit) {
-        event = omitFieldForUpdate(omit)(event)
+    const start = async () => {
+      for await (let event of changeStream) {
+        debug('Change stream event %O', event)
+        // Get resume token
+        const token = event?._id
+        // Omit nested fields that are not handled by $unset.
+        // For example, if 'a' was omitted then 'a.b.c' should be omitted.
+        if (event.operationType === 'update' && omit) {
+          event = omitFieldForUpdate(omit)(event)
+        }
+        // Process record
+        await processRecord(event)
+        // Update change stream token
+        await redis.set(changeStreamTokenKey, JSON.stringify(token))
       }
-      // Process record
-      await processRecord(event)
-      // Update change stream token
-      await redis.set(changeStreamTokenKey, JSON.stringify(token))
     }
+    const stop = () => {
+      abortController.abort()
+    }
+    return { start, stop }
   }
 
   /**

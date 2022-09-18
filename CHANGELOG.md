@@ -1,3 +1,8 @@
+# 0.16.0
+
+- BREAKING CHANGE: Changed API for `processChangeStream`. You must explicitly call `start` now.
+The change stream can be stopped by calling `stop`.
+
 # 0.15.0
 
 - Export `getCollectionKey` util.

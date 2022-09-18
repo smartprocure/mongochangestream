@@ -1,6 +1,6 @@
 {
   "name": "mongochangestream",
-  "version": "0.15.0",
+  "version": "0.16.0",
   "description": "Sync MongoDB collections via change streams into any database.",
   "author": "GovSpend",
   "main": "dist/index.js",
@@ -36,15 +36,13 @@
     "@types/lodash": "^4.14.182",
     "@typescript-eslint/eslint-plugin": "^5.32.0",
     "eslint": "^8.21.0",
-    "ioredis": "^5.2.2",
-    "mongodb": "^4.8.1",
     "prettier": "^2.7.1",
     "typescript": "^4.7.4"
   },
   "dependencies": {
     "debug": "^4.3.4",
     "lodash": "^4.17.21",
-    "prom-utils": "^0.2.0"
+    "prom-utils": "^0.3.0"
   },
   "peerDependencies": {
     "ioredis": ">= 5.2.3",
