@@ -41,9 +41,9 @@ const processRecords = async (docs: ChangeStreamInsertDocument[]) => {
 }
 
 // Sync collection
-const sync = initSync(redis)
-sync.syncCollection(coll, processRecord)
-const changeStream = await sync.processChangeStream(coll, processRecord)
+const sync = initSync(redis, coll)
+sync.syncCollection(processRecord)
+const changeStream = await sync.processChangeStream(processRecord)
 changeStream.start()
 setTimeout(changeStream.stop, 30000)
 ```
@@ -66,13 +66,11 @@ export type ProcessRecords = (
 ) => void | Promise<void>
 
 const runInitialScan = async (
-  collection: Collection,
   processRecords: ProcessRecords,
   options?: QueueOptions & ScanOptions
 )
 
 const processChangeStream = async (
-  collection: Collection,
   processRecord: ProcessRecord,
   pipeline?: Document[]
 )

@@ -1,3 +1,8 @@
+# 0.17.0
+
+- BREAKING CHANGE: `initSync` now takes `collection`.
+- NEW: `detectSchemaChange`.
+
 # 0.16.0
 
 - BREAKING CHANGE: Changed API for `processChangeStream`. You must explicitly call `start` now.

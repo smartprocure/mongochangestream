@@ -4,6 +4,7 @@ import {
   Collection,
   Document,
   ObjectId,
+  Db,
 } from 'mongodb'
 import changeStreamToIterator from './changeStreamToIterator.js'
 import {
@@ -21,6 +22,8 @@ import {
   omitFieldForUpdate,
   setDefaults,
 } from './util.js'
+import events from 'node:events'
+import ms from 'ms'
 
 const debug = _debug('mongochangestream')
 
@@ -29,16 +32,18 @@ const keyPrefix = 'mongoChangeStream'
 /**
  * Get Redis keys used for the given collection.
  */
-export const getKeys = (collection: Collection) => {
+const getKeys = (collection: Collection) => {
   const collectionKey = getCollectionKey(collection)
   const scanPrefix = `${keyPrefix}:${collectionKey}`
   const scanCompletedKey = `${scanPrefix}:initialScanCompletedOn`
   const lastScanIdKey = `${scanPrefix}:lastScanId`
   const changeStreamTokenKey = `${keyPrefix}:${collectionKey}:changeStreamToken`
+  const schemaKey = `${keyPrefix}:${collectionKey}:schema`
   return {
     scanCompletedKey,
     lastScanIdKey,
     changeStreamTokenKey,
+    schemaKey,
   }
 }
 
@@ -48,7 +53,12 @@ export const defaultSortField = {
   deserialize: (x: string) => new ObjectId(x),
 }
 
-export const initSync = (redis: Redis, options?: SyncOptions) => {
+export const initSync = (
+  redis: Redis,
+  collection: Collection,
+  options?: SyncOptions
+) => {
+  const keys = getKeys(collection)
   const omit = options?.omit
   const omitPipeline = omit ? generatePipelineFromOmit(omit) : []
   /**
@@ -56,14 +66,13 @@ export const initSync = (redis: Redis, options?: SyncOptions) => {
    * Sorting defaults to `_id`.
    */
   const runInitialScan = async (
-    collection: Collection,
     processRecords: ProcessRecords,
     options?: QueueOptions & ScanOptions
   ) => {
     debug('Running initial scan')
     const sortField = options?.sortField || defaultSortField
     // Redis keys
-    const { scanCompletedKey, lastScanIdKey } = getKeys(collection)
+    const { scanCompletedKey, lastScanIdKey } = keys
     // Determine if initial scan has already completed
     const scanCompleted = await redis.get(scanCompletedKey)
     // Scan already completed so return
@@ -125,13 +134,12 @@ export const initSync = (redis: Redis, options?: SyncOptions) => {
    * the change stream.
    */
   const processChangeStream = async (
-    collection: Collection,
     processRecord: ProcessRecord,
     pipeline: Document[] = []
   ) => {
     const abortController = new AbortController()
     // Redis keys
-    const { changeStreamTokenKey } = getKeys(collection)
+    const { changeStreamTokenKey } = keys
     // Lookup change stream token
     const token = await redis.get(changeStreamTokenKey)
     const options = token
@@ -170,17 +178,70 @@ export const initSync = (redis: Redis, options?: SyncOptions) => {
   /**
    * Delete all Redis keys for the given collection.
    */
-  const reset = async (collection: Collection) => {
-    const keys = Object.values(getKeys(collection))
-    await redis.del(...keys)
+  const reset = async () => {
+    await redis.del(...Object.values(keys))
   }
 
   /**
    * Delete completed on key in Redis for the given collection.
    */
-  const clearCompletedOn = async (collection: Collection) => {
-    const keys = getKeys(collection)
+  const clearCompletedOn = async () => {
     await redis.del(keys.scanCompletedKey)
+  }
+
+  /**
+   * Get the existing JSON schema for the collection.
+   */
+  const getCollectionSchema = async (db: Db): Promise<object | undefined> => {
+    const colls = await db
+      .listCollections({ name: collection.collectionName })
+      .toArray()
+    return _.get('0.options.validator.$jsonSchema', colls)
+  }
+
+  /**
+   * Get cached collection schema
+   */
+  const getCachedCollectionSchema = () =>
+    redis.get(keys.schemaKey).then((val: any) => val && JSON.parse(val))
+  /**
+   * Check for schema changes every interval and emit 'change' event if found.
+   */
+  const detectSchemaChange = async (db: Db, interval = ms('10s')) => {
+    const emitter = new events.EventEmitter()
+    let timer: NodeJS.Timer
+    // Check for a cached schema
+    let previousSchema = await getCachedCollectionSchema()
+    if (!previousSchema) {
+      const schema = await getCollectionSchema(db)
+      // Persist schema
+      await redis.setnx(keys.schemaKey, JSON.stringify(schema))
+      previousSchema = schema
+    }
+    // Check for a schema change
+    const checkForSchemaChange = async () => {
+      const currentSchema = await getCollectionSchema(db)
+      // Schemas are no longer the same
+      if (!_.isEqual(currentSchema, previousSchema)) {
+        debug('Schema change detected %O', currentSchema)
+        emitter.emit('change', { initialSchema: previousSchema, currentSchema })
+        // Persist schema
+        await redis.set(keys.schemaKey, JSON.stringify(currentSchema))
+        previousSchema = currentSchema
+      }
+    }
+    const start = () => {
+      debug('Started polling for schema changes')
+      // Perform an inital check
+      checkForSchemaChange()
+      // Check for schema changes every interval
+      timer = setInterval(checkForSchemaChange, interval)
+    }
+    const stop = () => {
+      debug('Stopped polling for schema changes')
+      clearInterval(timer)
+    }
+    return { start, stop, emitter }
   }
 
   return {
@@ -188,5 +249,8 @@ export const initSync = (redis: Redis, options?: SyncOptions) => {
     processChangeStream,
     reset,
     clearCompletedOn,
+    getCollectionSchema,
+    detectSchemaChange,
+    keys,
   }
 }
