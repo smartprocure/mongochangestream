@@ -15,7 +15,7 @@ import {
 } from './types.js'
 import _debug from 'debug'
 import type { default as Redis } from 'ioredis'
-import { batchQueue, QueueOptions } from 'prom-utils'
+import { batchQueue, defer, Deferred, QueueOptions } from 'prom-utils'
 import {
   generatePipelineFromOmit,
   getCollectionKey,
@@ -138,6 +138,7 @@ export const initSync = (
     pipeline: Document[] = []
   ) => {
     const abortController = new AbortController()
+    let deferred: Deferred
     // Redis keys
     const { changeStreamTokenKey } = keys
     // Lookup change stream token
@@ -150,12 +151,16 @@ export const initSync = (
     const changeStream = changeStreamToIterator(
       collection,
       [...omitPipeline, ...pipeline],
-      abortController.signal,
       options
     )
     const start = async () => {
       for await (let event of changeStream) {
         debug('Change stream event %O', event)
+        // Don't process event if stopping
+        if (abortController.signal.aborted) {
+          return
+        }
+        deferred = defer()
         // Get resume token
         const token = event?._id
         // Omit nested fields that are not handled by $unset.
@@ -167,10 +172,13 @@ export const initSync = (
         await processRecord(event)
         // Update change stream token
         await redis.set(changeStreamTokenKey, JSON.stringify(token))
+        deferred.done()
       }
     }
     const stop = () => {
       abortController.abort()
+      // Wait for event to be processed
+      return deferred?.promise
     }
     return { start, stop }
   }
@@ -224,9 +232,11 @@ export const initSync = (
       // Schemas are no longer the same
       if (!_.isEqual(currentSchema, previousSchema)) {
         debug('Schema change detected %O', currentSchema)
-        emitter.emit('change', { initialSchema: previousSchema, currentSchema })
         // Persist schema
         await redis.set(keys.schemaKey, JSON.stringify(currentSchema))
+        // Emit change
+        emitter.emit('change', { previousSchema, currentSchema })
+        // Previous schema is now the current schema
         previousSchema = currentSchema
       }
     }

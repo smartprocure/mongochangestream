@@ -1,3 +1,7 @@
+# 0.18.0
+
+- Await processing of event when calling `stop`.
+
 # 0.17.0
 
 - BREAKING CHANGE: `initSync` now takes `collection`.
