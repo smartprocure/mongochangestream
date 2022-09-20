@@ -5,8 +5,9 @@ import {
   Document,
   ObjectId,
   Db,
+  ChangeStream,
 } from 'mongodb'
-import changeStreamToIterator from './changeStreamToIterator.js'
+import toIterator from './changeStreamToIterator.js'
 import {
   SyncOptions,
   ProcessRecord,
@@ -69,58 +70,75 @@ export const initSync = (
     processRecords: ProcessRecords,
     options?: QueueOptions & ScanOptions
   ) => {
-    debug('Running initial scan')
-    const sortField = options?.sortField || defaultSortField
-    // Redis keys
-    const { scanCompletedKey, lastScanIdKey } = keys
-    // Determine if initial scan has already completed
-    const scanCompleted = await redis.get(scanCompletedKey)
-    // Scan already completed so return
-    if (scanCompleted) {
-      debug(`Initial scan previously completed on %s`, scanCompleted)
-      return
-    }
-    const _processRecords = async (records: ChangeStreamInsertDocument[]) => {
-      // Process batch of records
-      await processRecords(records)
-      const lastDocument = records[records.length - 1].fullDocument
-      // Record last id of the batch
-      const lastId = _.get(sortField.field, lastDocument)
-      if (lastId) {
-        await redis.set(lastScanIdKey, sortField.serialize(lastId))
+    let deferred: Deferred
+    let cursor: ReturnType<typeof collection.find>
+
+    const start = async () => {
+      debug('Starting initial scan')
+      const sortField = options?.sortField || defaultSortField
+      // Redis keys
+      const { scanCompletedKey, lastScanIdKey } = keys
+      // Determine if initial scan has already completed
+      const scanCompleted = await redis.get(scanCompletedKey)
+      // Scan already completed so return
+      if (scanCompleted) {
+        debug(`Initial scan previously completed on %s`, scanCompleted)
+        return
       }
+      const _processRecords = async (records: ChangeStreamInsertDocument[]) => {
+        // Process batch of records
+        await processRecords(records)
+        const lastDocument = records[records.length - 1].fullDocument
+        // Record last id of the batch
+        const lastId = _.get(sortField.field, lastDocument)
+        if (lastId) {
+          await redis.set(lastScanIdKey, sortField.serialize(lastId))
+        }
+      }
+      // Lookup last id successfully processed
+      const lastId = await redis.get(lastScanIdKey)
+      debug('Last scan id %s', lastId)
+      // Create queue
+      const queue = batchQueue(_processRecords, options)
+      // Query collection
+      cursor = collection
+        // Skip ids already processed
+        .find(
+          lastId
+            ? { [sortField.field]: { $gt: sortField.deserialize(lastId) } }
+            : {},
+          omit ? { projection: setDefaults(omit, 0) } : {}
+        )
+        .sort({ [sortField.field]: 1 })
+      const ns = { db: collection.dbName, coll: collection.collectionName }
+      // Process documents
+      for await (const doc of cursor) {
+        debug('Initial scan doc %O', doc)
+        deferred = defer()
+        const changeStreamDoc = {
+          fullDocument: doc,
+          operationType: 'insert',
+          ns,
+        } as unknown as ChangeStreamInsertDocument
+        await queue.enqueue(changeStreamDoc)
+        deferred.done()
+      }
+      // Flush the queue
+      await queue.flush()
+      // Record scan complete
+      await redis.set(scanCompletedKey, new Date().toString())
+      debug('Completed initial scan')
     }
-    // Lookup last id successfully processed
-    const lastId = await redis.get(lastScanIdKey)
-    debug('Last scan id %s', lastId)
-    // Create queue
-    const queue = batchQueue(_processRecords, options)
-    // Query collection
-    const cursor = collection
-      // Skip ids already processed
-      .find(
-        lastId
-          ? { [sortField.field]: { $gt: sortField.deserialize(lastId) } }
-          : {},
-        omit ? { projection: setDefaults(omit, 0) } : {}
-      )
-      .sort({ [sortField.field]: 1 })
-    const ns = { db: collection.dbName, coll: collection.collectionName }
-    // Process documents
-    for await (const doc of cursor) {
-      debug('Initial scan doc %O', doc)
-      const changeStreamDoc = {
-        fullDocument: doc,
-        operationType: 'insert',
-        ns,
-      } as unknown as ChangeStreamInsertDocument
-      await queue.enqueue(changeStreamDoc)
+
+    const stop = async () => {
+      debug('Stopping initial scan')
+      // Wait for event to be processed
+      await deferred?.promise
+      // Close the cursor
+      await cursor?.close()
     }
-    // Flush the queue
-    await queue.flush()
-    // Record scan complete
-    await redis.set(scanCompletedKey, new Date().toString())
-    debug('Completed initial scan')
+
+    return { start, stop }
   }
 
   const defaultOptions = { fullDocument: 'updateLookup' }
@@ -137,29 +155,25 @@ export const initSync = (
     processRecord: ProcessRecord,
     pipeline: Document[] = []
   ) => {
-    const abortController = new AbortController()
     let deferred: Deferred
-    // Redis keys
-    const { changeStreamTokenKey } = keys
-    // Lookup change stream token
-    const token = await redis.get(changeStreamTokenKey)
-    const options = token
-      ? // Resume token found, so set change stream resume point
-        { ...defaultOptions, resumeAfter: JSON.parse(token) }
-      : defaultOptions
-    // Get the change stream as an async iterator
-    const changeStream = changeStreamToIterator(
-      collection,
-      [...omitPipeline, ...pipeline],
-      options
-    )
+    let changeStream: ChangeStream
+
     const start = async () => {
-      for await (let event of changeStream) {
+      debug('Starting change stream')
+      // Redis keys
+      const { changeStreamTokenKey } = keys
+      // Lookup change stream token
+      const token = await redis.get(changeStreamTokenKey)
+      const options = token
+        ? // Resume token found, so set change stream resume point
+          { ...defaultOptions, resumeAfter: JSON.parse(token) }
+        : defaultOptions
+      // Start the change stream
+      changeStream = collection.watch([...omitPipeline, ...pipeline], options)
+      const iterator = toIterator(changeStream)
+      // Get the change stream as an async iterator
+      for await (let event of iterator) {
         debug('Change stream event %O', event)
-        // Don't process event if stopping
-        if (abortController.signal.aborted) {
-          return
-        }
         deferred = defer()
         // Get resume token
         const token = event?._id
@@ -175,11 +189,14 @@ export const initSync = (
         deferred.done()
       }
     }
-    const stop = () => {
-      abortController.abort()
+
+    const stop = async () => {
+      debug('Stopping change stream')
+      await changeStream.close()
       // Wait for event to be processed
-      return deferred?.promise
+      await deferred?.promise
     }
+
     return { start, stop }
   }
 
@@ -241,14 +258,14 @@ export const initSync = (
       }
     }
     const start = () => {
-      debug('Started polling for schema changes')
-      // Perform an inital check
+      debug('Starting polling for schema changes')
       checkForSchemaChange()
+      // Perform an inital check
       // Check for schema changes every interval
       timer = setInterval(checkForSchemaChange, interval)
     }
     const stop = () => {
-      debug('Stopped polling for schema changes')
+      debug('Stopping polling for schema changes')
       clearInterval(timer)
     }
     return { start, stop, emitter }

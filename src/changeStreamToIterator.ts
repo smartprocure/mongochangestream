@@ -1,25 +1,26 @@
-import { ChangeStreamOptions, Collection, Document } from 'mongodb'
-import _debug from 'debug'
+import { defer } from 'prom-utils'
+import { ChangeStreamDocument, ChangeStream } from 'mongodb'
 
-const debug = _debug('mongochangestream')
+const done = { value: {} as ChangeStreamDocument, done: true }
 
-const changeStreamToIterator = (
-  collection: Collection,
-  pipeline: Document[],
-  options: ChangeStreamOptions
-) => {
-  const changeStream = collection.watch(pipeline, options)
-  debug('Started change stream - pipeline %O options %O', pipeline, options)
+const toIterator = (changeStream: ChangeStream) => {
+  const deferred = defer()
+  changeStream.once('close', deferred.done)
   return {
     [Symbol.asyncIterator]() {
       return {
         async next() {
-          return changeStream
-            .next()
-            .then((data) => ({ value: data, done: false }))
+          return Promise.race([
+            deferred.promise.then(() => done),
+            changeStream.next().then((data) => ({ value: data, done: false })),
+          ])
+        },
+        async return() {
+          await changeStream.close()
+          return done
         },
       }
     },
   }
 }
-export default changeStreamToIterator
+export default toIterator

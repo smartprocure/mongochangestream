@@ -1,3 +1,10 @@
+# 0.19.0
+
+- BREAKING CHANGE: Changed API for `runInitialScan`. You must explicitly call `start` now.
+The change stream can be stopped by calling `stop`.
+- It is now possible to cleanly stop `runInitialScan` and `processChangeStream`, allowing
+for a smooth restarting behavior if a schema change is detected.
+
 # 0.18.0
 
 - Await processing of event when calling `stop`.
