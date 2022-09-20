@@ -42,7 +42,8 @@ const processRecords = async (docs: ChangeStreamInsertDocument[]) => {
 
 // Sync collection
 const sync = initSync(redis, coll)
-sync.syncCollection(processRecord)
+const initialScan = await sync.runInitialScan(processRecords)
+initialScan.start()
 const changeStream = await sync.processChangeStream(processRecord)
 changeStream.start()
 setTimeout(changeStream.stop, 30000)
