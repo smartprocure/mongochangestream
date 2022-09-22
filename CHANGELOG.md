@@ -1,3 +1,9 @@
+# 0.19.1
+
+- Fix issue with `runInitialScan` where calling `stop` before the scan had finished
+would incorrectly set the scan completed key in Redis. Also, `stop` now awaits flushing
+the queue.
+
 # 0.19.0
 
 - BREAKING CHANGE: Changed API for `runInitialScan`. You must explicitly call `start` now.

@@ -72,6 +72,7 @@ export const initSync = (
   ) => {
     let deferred: Deferred
     let cursor: ReturnType<typeof collection.find>
+    const abortController = new AbortController()
 
     const start = async () => {
       debug('Starting initial scan')
@@ -94,6 +95,7 @@ export const initSync = (
         if (lastId) {
           await redis.set(lastScanIdKey, sortField.serialize(lastId))
         }
+        deferred.done()
       }
       // Lookup last id successfully processed
       const lastId = await redis.get(lastScanIdKey)
@@ -121,21 +123,24 @@ export const initSync = (
           ns,
         } as unknown as ChangeStreamInsertDocument
         await queue.enqueue(changeStreamDoc)
-        deferred.done()
       }
       // Flush the queue
       await queue.flush()
-      // Record scan complete
-      await redis.set(scanCompletedKey, new Date().toString())
-      debug('Completed initial scan')
+      // Don't record scan complete if aborted
+      if (!abortController.signal.aborted) {
+        // Record scan complete
+        await redis.set(scanCompletedKey, new Date().toString())
+        debug('Completed initial scan')
+      }
     }
 
     const stop = async () => {
       debug('Stopping initial scan')
-      // Wait for event to be processed
-      await deferred?.promise
       // Close the cursor
       await cursor?.close()
+      abortController.abort()
+      // Wait for the queue to be flushed
+      await deferred?.promise
     }
 
     return { start, stop }
@@ -192,7 +197,7 @@ export const initSync = (
 
     const stop = async () => {
       debug('Stopping change stream')
-      await changeStream.close()
+      await changeStream?.close()
       // Wait for event to be processed
       await deferred?.promise
     }
