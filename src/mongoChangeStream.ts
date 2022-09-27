@@ -35,11 +35,11 @@ const keyPrefix = 'mongoChangeStream'
  */
 const getKeys = (collection: Collection) => {
   const collectionKey = getCollectionKey(collection)
-  const scanPrefix = `${keyPrefix}:${collectionKey}`
-  const scanCompletedKey = `${scanPrefix}:initialScanCompletedOn`
-  const lastScanIdKey = `${scanPrefix}:lastScanId`
-  const changeStreamTokenKey = `${keyPrefix}:${collectionKey}:changeStreamToken`
-  const schemaKey = `${keyPrefix}:${collectionKey}:schema`
+  const collectionPrefix = `${keyPrefix}:${collectionKey}`
+  const scanCompletedKey = `${collectionPrefix}:initialScanCompletedOn`
+  const lastScanIdKey = `${collectionPrefix}:lastScanId`
+  const changeStreamTokenKey = `${collectionPrefix}:changeStreamToken`
+  const schemaKey = `${collectionPrefix}:schema`
   return {
     scanCompletedKey,
     lastScanIdKey,
