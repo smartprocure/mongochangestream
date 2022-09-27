@@ -1,5 +1,5 @@
 import { defer } from 'prom-utils'
-import { ChangeStreamDocument, ChangeStream } from 'mongodb'
+import type { ChangeStreamDocument, ChangeStream } from 'mongodb'
 
 const done = { value: {} as ChangeStreamDocument, done: true }
 

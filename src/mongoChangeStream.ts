@@ -15,7 +15,7 @@ import {
   ScanOptions,
 } from './types.js'
 import _debug from 'debug'
-import type { default as Redis } from 'ioredis'
+import type { Redis } from 'ioredis'
 import { batchQueue, defer, Deferred, QueueOptions } from 'prom-utils'
 import {
   generatePipelineFromOmit,

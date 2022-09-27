@@ -1,3 +1,7 @@
+# 0.20.0
+
+- Bump `mongodb` peer dep.
+
 # 0.19.1
 
 - Fix issue with `runInitialScan` where calling `stop` before the scan had finished
