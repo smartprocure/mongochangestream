@@ -1,3 +1,7 @@
+# 0.21.0
+
+- Ensure that you can call `start` after calling `stop`.
+
 # 0.20.0
 
 - Bump `mongodb` peer dep.

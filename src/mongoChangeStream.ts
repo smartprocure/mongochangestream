@@ -72,10 +72,11 @@ export const initSync = (
   ) => {
     let deferred: Deferred
     let cursor: ReturnType<typeof collection.find>
-    const abortController = new AbortController()
+    let aborted: boolean
 
     const start = async () => {
       debug('Starting initial scan')
+      aborted = false
       const sortField = options?.sortField || defaultSortField
       // Redis keys
       const { scanCompletedKey, lastScanIdKey } = keys
@@ -127,7 +128,7 @@ export const initSync = (
       // Flush the queue
       await queue.flush()
       // Don't record scan complete if aborted
-      if (!abortController.signal.aborted) {
+      if (!aborted) {
         // Record scan complete
         await redis.set(scanCompletedKey, new Date().toString())
         debug('Completed initial scan')
@@ -136,9 +137,9 @@ export const initSync = (
 
     const stop = async () => {
       debug('Stopping initial scan')
+      aborted = true
       // Close the cursor
       await cursor?.close()
-      abortController.abort()
       // Wait for the queue to be flushed
       await deferred?.promise
     }
