@@ -1,3 +1,9 @@
+# 0.22.0
+
+- Option to strip metadata from a JSON schema for `detectSchemaChange`.
+- You can now await `changeStream.start` which resolves after the initial
+change detection has completed.
+
 # 0.21.0
 
 - Ensure that you can call `start` after calling `stop`.

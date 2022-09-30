@@ -17,3 +17,8 @@ export interface ScanOptions<T = any> {
     deserialize: (x: string) => T
   }
 }
+
+export interface ChangeOptions {
+  interval?: number
+  shouldRemoveMetadata?: boolean
+}

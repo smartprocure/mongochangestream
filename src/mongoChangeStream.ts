@@ -13,6 +13,7 @@ import {
   ProcessRecord,
   ProcessRecords,
   ScanOptions,
+  ChangeOptions,
 } from './types.js'
 import _debug from 'debug'
 import type { Redis } from 'ioredis'
@@ -21,7 +22,9 @@ import {
   generatePipelineFromOmit,
   getCollectionKey,
   omitFieldForUpdate,
+  removeMetadata,
   setDefaults,
+  when,
 } from './util.js'
 import events from 'node:events'
 import ms from 'ms'
@@ -68,7 +71,7 @@ export const initSync = (
    */
   const runInitialScan = async (
     processRecords: ProcessRecords,
-    options?: QueueOptions & ScanOptions
+    options: QueueOptions & ScanOptions = {}
   ) => {
     let deferred: Deferred
     let cursor: ReturnType<typeof collection.find>
@@ -77,7 +80,7 @@ export const initSync = (
     const start = async () => {
       debug('Starting initial scan')
       aborted = false
-      const sortField = options?.sortField || defaultSortField
+      const sortField = options.sortField || defaultSortField
       // Redis keys
       const { scanCompletedKey, lastScanIdKey } = keys
       // Determine if initial scan has already completed
@@ -223,11 +226,11 @@ export const initSync = (
   /**
    * Get the existing JSON schema for the collection.
    */
-  const getCollectionSchema = async (db: Db): Promise<object | undefined> => {
+  const getCollectionSchema = async (db: Db): Promise<object> => {
     const colls = await db
       .listCollections({ name: collection.collectionName })
       .toArray()
-    return _.get('0.options.validator.$jsonSchema', colls)
+    return _.get('0.options.validator.$jsonSchema', colls) || {}
   }
 
   /**
@@ -237,21 +240,32 @@ export const initSync = (
     redis.get(keys.schemaKey).then((val: any) => val && JSON.parse(val))
   /**
    * Check for schema changes every interval and emit 'change' event if found.
+   * Optionally, set interval and strip metadata (i.e., title and description)
+   * from the JSON schema.
    */
-  const detectSchemaChange = async (db: Db, interval = ms('10s')) => {
+  const detectSchemaChange = async (db: Db, options: ChangeOptions = {}) => {
+    const interval = options.interval || ms('1m')
+    const shouldRemoveMetadata = options.shouldRemoveMetadata
+    const maybeRemoveMetadata = when(shouldRemoveMetadata, removeMetadata)
+
     const emitter = new events.EventEmitter()
     let timer: NodeJS.Timer
     // Check for a cached schema
-    let previousSchema = await getCachedCollectionSchema()
+    let previousSchema = await getCachedCollectionSchema().then(
+      (schema) => schema && maybeRemoveMetadata(schema)
+    )
     if (!previousSchema) {
-      const schema = await getCollectionSchema(db)
+      const schema = await getCollectionSchema(db).then(maybeRemoveMetadata)
       // Persist schema
       await redis.setnx(keys.schemaKey, JSON.stringify(schema))
       previousSchema = schema
     }
+    debug('Previous schema %O', previousSchema)
     // Check for a schema change
     const checkForSchemaChange = async () => {
-      const currentSchema = await getCollectionSchema(db)
+      const currentSchema = await getCollectionSchema(db).then(
+        maybeRemoveMetadata
+      )
       // Schemas are no longer the same
       if (!_.isEqual(currentSchema, previousSchema)) {
         debug('Schema change detected %O', currentSchema)
@@ -263,10 +277,10 @@ export const initSync = (
         previousSchema = currentSchema
       }
     }
-    const start = () => {
+    const start = async () => {
       debug('Starting polling for schema changes')
-      checkForSchemaChange()
       // Perform an inital check
+      await checkForSchemaChange()
       // Check for schema changes every interval
       timer = setInterval(checkForSchemaChange, interval)
     }

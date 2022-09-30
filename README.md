@@ -44,9 +44,19 @@ const processRecords = async (docs: ChangeStreamInsertDocument[]) => {
 const sync = initSync(redis, coll)
 const initialScan = await sync.runInitialScan(processRecords)
 initialScan.start()
+// Process change stream
 const changeStream = await sync.processChangeStream(processRecord)
 changeStream.start()
 setTimeout(changeStream.stop, 30000)
+// Detect schema changes and ignore metadata fields (i.e., title and description)
+const schemaChange = await sync.detectSchemaChange(db, {
+  shouldRemoveMetadata: true,
+})
+schemaChange.start()
+schemaChange.emitter.on('change', () => {
+  initialScan.stop()
+  changeStream.stop()
+})
 ```
 
 Below are the available methods.
@@ -68,13 +78,15 @@ export type ProcessRecords = (
 
 const runInitialScan = async (
   processRecords: ProcessRecords,
-  options?: QueueOptions & ScanOptions
+  options: QueueOptions & ScanOptions = {}
 )
 
 const processChangeStream = async (
   processRecord: ProcessRecord,
-  pipeline?: Document[]
+  pipeline: Document[] = []
 )
+
+const detectSchemaChange = async (db: Db, options: ChangeOptions = {})
 ```
 
 ## Change Stream Strategies
