@@ -34,7 +34,7 @@ const debug = _debug('mongochangestream')
 const keyPrefix = 'mongoChangeStream'
 
 /**
- * Get Redis keys used for the given collection.
+ * Get Redis keys used for the collection.
  */
 const getKeys = (collection: Collection) => {
   const collectionKey = getCollectionKey(collection)
@@ -65,10 +65,7 @@ export const initSync = (
   const keys = getKeys(collection)
   const omit = options?.omit
   const omitPipeline = omit ? generatePipelineFromOmit(omit) : []
-  /**
-   * Run initial collection scan. `options.batchSize` defaults to 500.
-   * Sorting defaults to `_id`.
-   */
+
   const runInitialScan = async (
     processRecords: ProcessRecords,
     options: QueueOptions & ScanOptions = {}
@@ -152,14 +149,6 @@ export const initSync = (
 
   const defaultOptions = { fullDocument: 'updateLookup' }
 
-  /**
-   * Process MongoDB change stream for the given collection.
-   * If omit is passed to `initSync` a pipeline stage that removes
-   * those fields will be prepended to the `pipeline` argument.
-   *
-   * Call `start` to start processing events and `stop` to close
-   * the change stream.
-   */
   const processChangeStream = async (
     processRecord: ProcessRecord,
     pipeline: Document[] = []
@@ -209,23 +198,10 @@ export const initSync = (
     return { start, stop }
   }
 
-  /**
-   * Delete all Redis keys for the given collection.
-   */
   const reset = async () => {
     await redis.del(...Object.values(keys))
   }
 
-  /**
-   * Delete completed on key in Redis for the given collection.
-   */
-  const clearCompletedOn = async () => {
-    await redis.del(keys.scanCompletedKey)
-  }
-
-  /**
-   * Get the existing JSON schema for the collection.
-   */
   const getCollectionSchema = async (db: Db): Promise<object> => {
     const colls = await db
       .listCollections({ name: collection.collectionName })
@@ -238,11 +214,7 @@ export const initSync = (
    */
   const getCachedCollectionSchema = () =>
     redis.get(keys.schemaKey).then((val: any) => val && JSON.parse(val))
-  /**
-   * Check for schema changes every interval and emit 'change' event if found.
-   * Optionally, set interval and strip metadata (i.e., title and description)
-   * from the JSON schema.
-   */
+
   const detectSchemaChange = async (db: Db, options: ChangeOptions = {}) => {
     const interval = options.interval || ms('1m')
     const shouldRemoveMetadata = options.shouldRemoveMetadata
@@ -292,12 +264,43 @@ export const initSync = (
   }
 
   return {
+    /**
+     * Run initial collection scan. `options.batchSize` defaults to 500.
+     * Sorting defaults to `_id`.
+     *
+     * Call `start` to start processing documents and `stop` to close
+     * the cursor.
+     */
     runInitialScan,
+    /**
+     * Process MongoDB change stream for the collection.
+     * If omit is passed to `initSync` a pipeline stage that removes
+     * those fields will be prepended to the `pipeline` argument.
+     *
+     * Call `start` to start processing events and `stop` to close
+     * the change stream.
+     */
     processChangeStream,
+    /**
+     * Delete all Redis keys for the collection.
+     */
     reset,
-    clearCompletedOn,
+    /**
+     * Get the existing JSON schema for the collection.
+     */
     getCollectionSchema,
+    /**
+     * Check for schema changes every interval and emit 'change' event if found.
+     * Optionally, set interval and strip metadata (i.e., title and description)
+     * from the JSON schema.
+     *
+     * Call `start` to start polling for schema changes and `stop` to clear
+     * the timer.
+     */
     detectSchemaChange,
+    /**
+     * Redis keys used for the collection.
+     */
     keys,
   }
 }
