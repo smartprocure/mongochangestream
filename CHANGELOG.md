@@ -1,3 +1,7 @@
+# 0.23.0
+
+- `JSONSchema` type.
+
 # 0.22.0
 
 - Option to strip metadata from a JSON schema for `detectSchemaChange`.

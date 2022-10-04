@@ -1,6 +1,7 @@
 import { Collection } from 'mongodb'
 import _ from 'lodash/fp.js'
-import { walkie, Node } from 'obj-walker'
+import { Node, walkie } from 'obj-walker'
+import { JSONSchema } from './types'
 
 export const setDefaults = (keys: string[], val: any) => {
   const obj: Record<string, any> = {}
@@ -29,11 +30,13 @@ export const omitFieldForUpdate = (omitPaths: string[]) =>
 export const getCollectionKey = (collection: Collection) =>
   `${collection.dbName}:${collection.collectionName}`
 
+export const traverseSchema = (x: JSONSchema) =>
+  x.properties || (x.items && { _items: x.items })
+
 /**
  * Remove title and description from a JSON schema.
  */
 export const removeMetadata = (schema: object) => {
-  const traverse = (x: any) => x.properties || (x.items && { items: x.items })
   const walkFn = ({ val }: Node) => {
     if ('title' in val) {
       delete val.title
@@ -42,11 +45,11 @@ export const removeMetadata = (schema: object) => {
       delete val.description
     }
   }
-  return walkie(schema, walkFn, { traverse })
+  return walkie(schema, walkFn, { traverse: traverseSchema })
 }
 
-export function when<T>(condition: any, fn: (x: T) => any) {
-  return function(x: T) {
+export function when<T, R>(condition: any, fn: (x: T) => R) {
+  return function (x: T) {
     return condition ? fn(x) : x
   }
-} 
+}

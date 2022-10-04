@@ -1,4 +1,5 @@
 import { ChangeStreamDocument, ChangeStreamInsertDocument } from 'mongodb'
+import { JSONSchema4, JSONSchema6, JSONSchema7 } from 'json-schema'
 
 export type ProcessRecord = (doc: ChangeStreamDocument) => void | Promise<void>
 
@@ -22,3 +23,5 @@ export interface ChangeOptions {
   interval?: number
   shouldRemoveMetadata?: boolean
 }
+
+export type JSONSchema = JSONSchema4 | JSONSchema6 | JSONSchema7

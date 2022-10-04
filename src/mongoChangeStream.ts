@@ -60,10 +60,10 @@ export const defaultSortField = {
 export const initSync = (
   redis: Redis,
   collection: Collection,
-  options?: SyncOptions
+  options: SyncOptions = {}
 ) => {
   const keys = getKeys(collection)
-  const omit = options?.omit
+  const omit = options.omit
   const omitPipeline = omit ? generatePipelineFromOmit(omit) : []
 
   const runInitialScan = async (
