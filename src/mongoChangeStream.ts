@@ -14,6 +14,7 @@ import {
   ProcessRecords,
   ScanOptions,
   ChangeOptions,
+  JSONSchema,
 } from './types.js'
 import _debug from 'debug'
 import type { Redis } from 'ioredis'
@@ -202,7 +203,7 @@ export const initSync = (
     await redis.del(...Object.values(keys))
   }
 
-  const getCollectionSchema = async (db: Db): Promise<object> => {
+  const getCollectionSchema = async (db: Db): Promise<JSONSchema> => {
     const colls = await db
       .listCollections({ name: collection.collectionName })
       .toArray()
