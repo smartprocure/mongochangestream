@@ -1,3 +1,7 @@
+# 0.24.0
+
+- Use `eventemitter3`.
+
 # 0.23.0
 
 - `JSONSchema` type.

@@ -25,3 +25,5 @@ export interface ChangeOptions {
 }
 
 export type JSONSchema = JSONSchema4 | JSONSchema6 | JSONSchema7
+
+export type Events = 'change'

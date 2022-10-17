@@ -9,6 +9,7 @@ import {
 } from 'mongodb'
 import toIterator from './changeStreamToIterator.js'
 import {
+  Events,
   SyncOptions,
   ProcessRecord,
   ProcessRecords,
@@ -27,7 +28,7 @@ import {
   setDefaults,
   when,
 } from './util.js'
-import events from 'node:events'
+import EventEmitter from 'eventemitter3'
 import ms from 'ms'
 
 const debug = _debug('mongochangestream')
@@ -221,7 +222,7 @@ export const initSync = (
     const shouldRemoveMetadata = options.shouldRemoveMetadata
     const maybeRemoveMetadata = when(shouldRemoveMetadata, removeMetadata)
 
-    const emitter = new events.EventEmitter()
+    const emitter = new EventEmitter<Events>()
     let timer: NodeJS.Timer
     // Check for a cached schema
     let previousSchema = await getCachedCollectionSchema().then(
