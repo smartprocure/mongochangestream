@@ -1,3 +1,7 @@
+# 0.25.0
+
+- Latest `prom-utils` that includes `batchBytes` option.
+
 # 0.24.0
 
 - Use `eventemitter3`.
