@@ -12,11 +12,19 @@ export interface SyncOptions {
 }
 
 export interface ScanOptions<T = any> {
+  maintainHealth?: boolean
+  healthCheckInterval?: number
   sortField?: {
     field: string
     serialize: (x: T) => string
     deserialize: (x: string) => T
   }
+}
+
+export interface ChangeStreamOptions {
+  maintainHealth?: boolean
+  healthCheckInterval?: number
+  pipeline?: Document[]
 }
 
 export interface ChangeOptions {
