@@ -110,15 +110,17 @@ export const initSync = (
       const checkHealth = async () => {
         const lastSyncedAt = await getLastSyncedAt()
         if (!stopped && lastSyncedAt && lastSyncedAt < getLastHealthCheck()) {
+          debug('Restarting initial scan')
           restart()
         }
       }
       const start = () => {
-        debug('Starting health monitoring')
+        debug('Starting initial scan health monitoring')
+        stopped = false
         timer = setInterval(checkHealth, healthCheckInterval)
       }
       const stop = () => {
-        debug('Stopping health monitoring')
+        debug('Stopping initial scan health monitoring')
         stopped = true
         clearInterval(timer)
       }
@@ -126,10 +128,6 @@ export const initSync = (
     }
 
     const healthCheck = maintainHealth(options.healthCheckInterval)
-
-    if (options.maintainHealth) {
-      healthCheck.start()
-    }
 
     const start = async () => {
       debug('Starting initial scan')
@@ -142,11 +140,13 @@ export const initSync = (
       // Scan already completed so return
       if (scanCompleted) {
         debug(`Initial scan previously completed on %s`, scanCompleted)
-        // Stop the health check
-        healthCheck.stop()
         // Exit
         return
       }
+      if (options.maintainHealth) {
+        healthCheck.start()
+      }
+
       const _processRecords = async (records: ChangeStreamInsertDocument[]) => {
         // Process batch of records
         await processRecords(records)
@@ -235,16 +235,19 @@ export const initSync = (
           getLastSyncedAt(),
           getLastRecordCreatedAt(),
         ])
+        // TODO: Make sure this logic is correct
         if (!stopped && lastSyncedAt && lastSyncedAt < lastRecordCreatedAt) {
+          debug('Restarting change stream')
           restart()
         }
       }
       const start = () => {
-        debug('Starting health monitoring')
+        debug('Starting change stream health monitoring')
+        stopped = false
         timer = setInterval(checkHealth, healthCheckInterval)
       }
       const stop = () => {
-        debug('Stopping health monitoring')
+        debug('Stopping change stream health monitoring')
         stopped = true
         clearInterval(timer)
       }
@@ -253,23 +256,26 @@ export const initSync = (
 
     const healthCheck = maintainHealth(options.healthCheckInterval)
 
-    if (options.maintainHealth) {
-      healthCheck.start()
-    }
-
     const start = async () => {
       debug('Starting change stream')
       // Redis keys
       const { changeStreamTokenKey } = keys
       // Lookup change stream token
       const token = await redis.get(changeStreamTokenKey)
-      const options = token
+      const changeStreamOptions = token
         ? // Resume token found, so set change stream resume point
           { ...defaultOptions, resumeAfter: JSON.parse(token) }
         : defaultOptions
       // Start the change stream
-      changeStream = collection.watch([...omitPipeline, ...pipeline], options)
+      changeStream = collection.watch(
+        [...omitPipeline, ...pipeline],
+        changeStreamOptions
+      )
       const iterator = toIterator(changeStream)
+      // Start the health check
+      if (options.maintainHealth) {
+        healthCheck.start()
+      }
       // Get the change stream as an async iterator
       for await (let event of iterator) {
         debug('Change stream event %O', event)
