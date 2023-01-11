@@ -45,11 +45,15 @@ const getKeys = (collection: Collection) => {
   const lastScanIdKey = `${collectionPrefix}:lastScanId`
   const changeStreamTokenKey = `${collectionPrefix}:changeStreamToken`
   const schemaKey = `${collectionPrefix}:schema`
+  const lastChangeProcessedAtKey = `${collectionPrefix}:lastChangeProcessedAt`
+  const lastScanProcessedAtKey = `${collectionPrefix}:lastScanProcessedAt`
   return {
     scanCompletedKey,
     lastScanIdKey,
     changeStreamTokenKey,
     schemaKey,
+    lastChangeProcessedAtKey,
+    lastScanProcessedAtKey,
   }
 }
 
@@ -102,20 +106,21 @@ export const initSync = (
 
       const checkHealth = async () => {
         const lastHealthCheck = new Date().getTime() - healthCheckInterval
-        const lastSyncedAt = await getLastSyncedAt('lastScanProcessedAt')
-        // A entire health check interval has passed
-        if (!stopped && lastSyncedAt && lastSyncedAt < lastHealthCheck) {
-          debug('Restarting initial scan')
+        const withinHealthCheck = (x?: number) => x && x > lastHealthCheck
+        const lastSyncedAt = await getLastSyncedAt(keys.lastScanProcessedAtKey)
+        debug('Last scan processed at %d', lastSyncedAt)
+        // Records were not synced within the health check window
+        if (!withinHealthCheck(lastSyncedAt) && !stopped) {
           restart()
         }
       }
       const start = () => {
-        debug('Starting initial scan health monitoring')
+        debug('Starting initial scan health check')
         stopped = false
         timer = setInterval(checkHealth, healthCheckInterval)
       }
       const stop = () => {
-        debug('Stopping initial scan health monitoring')
+        debug('Stopping initial scan health check')
         stopped = true
         clearInterval(timer)
       }
@@ -152,7 +157,7 @@ export const initSync = (
           await redis.mset(
             lastScanIdKey,
             sortField.serialize(lastId),
-            'lastScanProcessedAt',
+            keys.lastScanProcessedAtKey,
             new Date().getTime()
           )
         }
@@ -209,6 +214,7 @@ export const initSync = (
     }
 
     const restart = async () => {
+      debug('Restarting initial scan')
       await stop()
       start()
     }
@@ -233,27 +239,28 @@ export const initSync = (
       const checkHealth = async () => {
         const lastHealthCheck = new Date().getTime() - healthCheckInterval
         const [lastSyncedAt, lastRecordCreatedAt] = await Promise.all([
-          getLastSyncedAt('lastChangeProcessedAt'),
+          getLastSyncedAt(keys.lastChangeProcessedAtKey),
           getLastRecordCreatedAt(),
         ])
-        const writtenWithinHealthCheck = (x?: number) =>
-          x && x > lastHealthCheck
-        const recordCreatedWithinHealthCheck =
-          writtenWithinHealthCheck(lastRecordCreatedAt)
-        const syncedWithinHealthCheck = writtenWithinHealthCheck(lastSyncedAt)
-
-        if (recordCreatedWithinHealthCheck && !syncedWithinHealthCheck && !stopped) {
-          debug('Restarting change stream')
+        debug('Last change processed at %d', lastSyncedAt)
+        debug('Last record created at %d', lastRecordCreatedAt)
+        const withinHealthCheck = (x?: number) => x && x > lastHealthCheck
+        // A record was created within the health check window but not synced
+        if (
+          withinHealthCheck(lastRecordCreatedAt) &&
+          !withinHealthCheck(lastSyncedAt) &&
+          !stopped
+        ) {
           restart()
         }
       }
       const start = () => {
-        debug('Starting change stream health monitoring')
+        debug('Starting change stream health check')
         stopped = false
         timer = setInterval(checkHealth, healthCheckInterval)
       }
       const stop = () => {
-        debug('Stopping change stream health monitoring')
+        debug('Stopping change stream health check')
         stopped = true
         clearInterval(timer)
       }
@@ -299,7 +306,7 @@ export const initSync = (
         await redis.mset(
           changeStreamTokenKey,
           JSON.stringify(token),
-          'lastChangeProcessedAt',
+          keys.lastChangeProcessedAtKey,
           new Date().getTime()
         )
         deferred.done()
@@ -317,6 +324,7 @@ export const initSync = (
     }
 
     const restart = async () => {
+      debug('Restarting change stream')
       await stop()
       start()
     }
