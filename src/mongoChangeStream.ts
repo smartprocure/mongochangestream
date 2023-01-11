@@ -88,7 +88,7 @@ export const initSync = (
       .toArray()
       .then((x) => {
         if (x.length) {
-          return x[0]._id.getTimestamp().getTime()
+          return x[0]?._id?.getTimestamp()?.getTime()
         }
       })
 
