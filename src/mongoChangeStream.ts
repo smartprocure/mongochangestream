@@ -161,7 +161,6 @@ export const initSync = (
             new Date().getTime()
           )
         }
-        deferred.done()
       }
       // Lookup last id successfully processed
       const lastId = await redis.get(lastScanIdKey)
@@ -200,6 +199,8 @@ export const initSync = (
         // Record scan complete
         await redis.set(scanCompletedKey, new Date().toString())
       }
+      deferred.done()
+      debug('Exit initial scan')
     }
 
     const stop = async () => {
@@ -211,6 +212,7 @@ export const initSync = (
       await cursor?.close()
       // Wait for the queue to be flushed
       await deferred?.promise
+      debug('Stopped initial scan')
     }
 
     const restart = async () => {
@@ -309,8 +311,8 @@ export const initSync = (
           keys.lastChangeProcessedAtKey,
           new Date().getTime()
         )
-        deferred.done()
       }
+      deferred.done()
     }
 
     const stop = async () => {
