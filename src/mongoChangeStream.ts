@@ -75,7 +75,7 @@ export const initSync = (
       }
     })
 
-  const getLastRecordCreatedAt = (): Promise<number> =>
+  const getLastRecordCreatedAt = (): Promise<number | undefined> =>
     collection
       .find({})
       .sort({ _id: -1 })
@@ -100,13 +100,11 @@ export const initSync = (
       let timer: NodeJS.Timer
       let stopped: boolean
 
-      const getLastHealthCheck = () =>
-        new Date().getTime() - healthCheckInterval
-
       const checkHealth = async () => {
+        const lastHealthCheck = new Date().getTime() - healthCheckInterval
         const lastSyncedAt = await getLastSyncedAt('lastScanProcessedAt')
         // A entire health check interval has passed
-        if (!stopped && lastSyncedAt && lastSyncedAt < getLastHealthCheck()) {
+        if (!stopped && lastSyncedAt && lastSyncedAt < lastHealthCheck) {
           debug('Restarting initial scan')
           restart()
         }
@@ -231,26 +229,22 @@ export const initSync = (
     const maintainHealth = (healthCheckInterval = ms('1m')) => {
       let timer: NodeJS.Timer
       let stopped: boolean
-      let lastRecordCreatedAt: number | undefined
-
-      const getLastHealthCheck = () =>
-        new Date().getTime() - healthCheckInterval
 
       const checkHealth = async () => {
-        if (!lastRecordCreatedAt) {
-          const time = await getLastRecordCreatedAt()
-          // Record was created within the health check interval
-          if (time > getLastHealthCheck()) {
-            lastRecordCreatedAt = time
-          }
-        }
-        if (lastRecordCreatedAt && lastRecordCreatedAt < getLastHealthCheck()) {
-          const lastSyncedAt = await getLastSyncedAt('lastChangeProcessedAt')
-          if (!lastSyncedAt || lastSyncedAt < lastRecordCreatedAt) {
-            debug('Restarting change stream')
-            restart()
-          }
-          lastRecordCreatedAt = undefined
+        const lastHealthCheck = new Date().getTime() - healthCheckInterval
+        const [lastSyncedAt, lastRecordCreatedAt] = await Promise.all([
+          getLastSyncedAt('lastChangeProcessedAt'),
+          getLastRecordCreatedAt(),
+        ])
+        const writtenWithinHealthCheck = (x?: number) =>
+          x && x > lastHealthCheck
+        const recordCreatedWithinHealthCheck =
+          writtenWithinHealthCheck(lastRecordCreatedAt)
+        const syncedWithinHealthCheck = writtenWithinHealthCheck(lastSyncedAt)
+
+        if (recordCreatedWithinHealthCheck && !syncedWithinHealthCheck && !stopped) {
+          debug('Restarting change stream')
+          restart()
         }
       }
       const start = () => {
