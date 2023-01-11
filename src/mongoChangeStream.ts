@@ -105,12 +105,14 @@ export const initSync = (
       let stopped: boolean
 
       const checkHealth = async () => {
+        debug('Checking health - initial scan')
         const lastHealthCheck = new Date().getTime() - healthCheckInterval
         const withinHealthCheck = (x?: number) => x && x > lastHealthCheck
         const lastSyncedAt = await getLastSyncedAt(keys.lastScanProcessedAtKey)
         debug('Last scan processed at %d', lastSyncedAt)
         // Records were not synced within the health check window
         if (!withinHealthCheck(lastSyncedAt) && !stopped) {
+          debug('Health check failed - initial scan')
           restart()
         }
       }
@@ -199,7 +201,7 @@ export const initSync = (
         // Record scan complete
         await redis.set(scanCompletedKey, new Date().toString())
       }
-      deferred.done()
+      deferred?.done()
       debug('Exit initial scan')
     }
 
@@ -239,6 +241,7 @@ export const initSync = (
       let stopped: boolean
 
       const checkHealth = async () => {
+        debug('Checking health - change stream')
         const lastHealthCheck = new Date().getTime() - healthCheckInterval
         const [lastSyncedAt, lastRecordCreatedAt] = await Promise.all([
           getLastSyncedAt(keys.lastChangeProcessedAtKey),
@@ -253,6 +256,7 @@ export const initSync = (
           !withinHealthCheck(lastSyncedAt) &&
           !stopped
         ) {
+          debug('Health check failed - change stream')
           restart()
         }
       }
@@ -312,7 +316,7 @@ export const initSync = (
           new Date().getTime()
         )
       }
-      deferred.done()
+      deferred?.done()
     }
 
     const stop = async () => {
