@@ -68,18 +68,14 @@ export const initSync = (
   const omit = options.omit
   const omitPipeline = omit ? generatePipelineFromOmit(omit) : []
 
-  // Cache value and track last sync date
-  const cacheAndTrack = (key: string, value: any) =>
-    redis.mset(key, value, 'lastSyncedAt', new Date().getTime())
-
-  const getLastSyncedAt = () =>
-    redis.get('lastSyncedAt').then((x) => {
+  const getLastSyncedAt = (key: string) =>
+    redis.get(key).then((x) => {
       if (x) {
         return parseInt(x, 10)
       }
     })
 
-  const getLastRecordCreatedAt = () =>
+  const getLastRecordCreatedAt = (): Promise<number> =>
     collection
       .find({})
       .sort({ _id: -1 })
@@ -100,7 +96,7 @@ export const initSync = (
     let cursor: ReturnType<typeof collection.find>
     let aborted: boolean
 
-    const maintainHealth = (healthCheckInterval = ms('5m')) => {
+    const maintainHealth = (healthCheckInterval = ms('1m')) => {
       let timer: NodeJS.Timer
       let stopped: boolean
 
@@ -108,7 +104,8 @@ export const initSync = (
         new Date().getTime() - healthCheckInterval
 
       const checkHealth = async () => {
-        const lastSyncedAt = await getLastSyncedAt()
+        const lastSyncedAt = await getLastSyncedAt('lastScanProcessedAt')
+        // A entire health check interval has passed
         if (!stopped && lastSyncedAt && lastSyncedAt < getLastHealthCheck()) {
           debug('Restarting initial scan')
           restart()
@@ -154,7 +151,12 @@ export const initSync = (
         // Record last id of the batch
         const lastId = _.get(sortField.field, lastDocument)
         if (lastId) {
-          await cacheAndTrack(lastScanIdKey, sortField.serialize(lastId))
+          await redis.mset(
+            lastScanIdKey,
+            sortField.serialize(lastId),
+            'lastScanProcessedAt',
+            new Date().getTime()
+          )
         }
         deferred.done()
       }
@@ -226,19 +228,29 @@ export const initSync = (
     let changeStream: ChangeStream
     const pipeline = options.pipeline || []
 
-    const maintainHealth = (healthCheckInterval = ms('5m')) => {
+    const maintainHealth = (healthCheckInterval = ms('1m')) => {
       let timer: NodeJS.Timer
       let stopped: boolean
+      let lastRecordCreatedAt: number | undefined
+
+      const getLastHealthCheck = () =>
+        new Date().getTime() - healthCheckInterval
 
       const checkHealth = async () => {
-        const [lastSyncedAt, lastRecordCreatedAt] = await Promise.all([
-          getLastSyncedAt(),
-          getLastRecordCreatedAt(),
-        ])
-        // TODO: Make sure this logic is correct
-        if (!stopped && lastSyncedAt && lastSyncedAt < lastRecordCreatedAt) {
-          debug('Restarting change stream')
-          restart()
+        if (!lastRecordCreatedAt) {
+          const time = await getLastRecordCreatedAt()
+          // Record was created within the health check interval
+          if (time > getLastHealthCheck()) {
+            lastRecordCreatedAt = time
+          }
+        }
+        if (lastRecordCreatedAt && lastRecordCreatedAt < getLastHealthCheck()) {
+          const lastSyncedAt = await getLastSyncedAt('lastChangeProcessedAt')
+          if (!lastSyncedAt || lastSyncedAt < lastRecordCreatedAt) {
+            debug('Restarting change stream')
+            restart()
+          }
+          lastRecordCreatedAt = undefined
         }
       }
       const start = () => {
@@ -290,7 +302,12 @@ export const initSync = (
         // Process record
         await processRecord(event)
         // Update change stream token
-        await cacheAndTrack(changeStreamTokenKey, JSON.stringify(token))
+        await redis.mset(
+          changeStreamTokenKey,
+          JSON.stringify(token),
+          'lastChangeProcessedAt',
+          new Date().getTime()
+        )
         deferred.done()
       }
     }
