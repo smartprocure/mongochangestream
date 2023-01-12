@@ -1,3 +1,7 @@
+# 0.26.1
+
+- `Document` type should refer to type from `mongodb` not DOM.
+
 # 0.26.0
 
 - BREAKING CHANGE: `processChangeStream` now takes an option object instead of a pipeline for the second argument.

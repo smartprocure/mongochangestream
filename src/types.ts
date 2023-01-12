@@ -1,4 +1,8 @@
-import { ChangeStreamDocument, ChangeStreamInsertDocument } from 'mongodb'
+import {
+  ChangeStreamDocument,
+  ChangeStreamInsertDocument,
+  Document,
+} from 'mongodb'
 
 export type ProcessRecord = (doc: ChangeStreamDocument) => void | Promise<void>
 
