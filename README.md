@@ -94,7 +94,7 @@ const detectSchemaChange = async (db: Db, options: ChangeOptions = {})
 Sometimes things stop working and a restart seems to fix the issue. In order
 to automate this process you can pass `maintainHealth: true` in the options
 for `runInitialScan` and `processChangeStream`. This will run a health check
-every `maintainHealthInterval` (defaults to 1m) and call `restart` if necessary.
+every `healthCheckInterval` (defaults to 1m) and call `restart` if necessary.
 
 ## Change Stream Strategies
 
