@@ -106,6 +106,9 @@ export const initSync = (
     let cursor: ReturnType<typeof collection.find>
     let aborted: boolean
 
+    /**
+     * Periodically check that records are being processed.
+     */
     const maintainHealth = (healthCheckInterval = ms('1m')) => {
       let timer: NodeJS.Timer
       let stopped: boolean
@@ -241,7 +244,11 @@ export const initSync = (
     let deferred: Deferred
     let changeStream: ChangeStream
     const pipeline = options.pipeline || []
-
+    
+    /**
+     * Periodically check that change stream events are being processed.
+     * Only applies to records inserted into the collection.
+     */
     const maintainHealth = (healthCheckInterval = ms('1m')) => {
       let timer: NodeJS.Timer
       let stopped: boolean
