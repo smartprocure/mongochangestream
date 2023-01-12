@@ -1,5 +1,4 @@
 import { ChangeStreamDocument, ChangeStreamInsertDocument } from 'mongodb'
-import { JSONSchema4, JSONSchema6, JSONSchema7 } from 'json-schema'
 
 export type ProcessRecord = (doc: ChangeStreamDocument) => void | Promise<void>
 
@@ -8,11 +7,14 @@ export type ProcessRecords = (
 ) => void | Promise<void>
 
 export interface SyncOptions {
+  /** Field paths to omit. */
   omit?: string[]
 }
 
 export interface ScanOptions<T = any> {
+  /** Set to true to run a health check in the background. */
   maintainHealth?: boolean
+  /** How often to run the health check. */
   healthCheckInterval?: number
   sortField?: {
     field: string
@@ -22,16 +24,20 @@ export interface ScanOptions<T = any> {
 }
 
 export interface ChangeStreamOptions {
+  /** Set to true to run a health check in the background. */
   maintainHealth?: boolean
+  /** How often to run the health check. */
   healthCheckInterval?: number
   pipeline?: Document[]
 }
 
 export interface ChangeOptions {
+  /** How often to retrieve the schema and look for a change. */
   interval?: number
+  /** Should fields like title and description be ignored when detecting a change. */
   shouldRemoveMetadata?: boolean
 }
 
-export type JSONSchema = JSONSchema4 | JSONSchema6 | JSONSchema7
+export type JSONSchema = Record<string, any>
 
 export type Events = 'change'

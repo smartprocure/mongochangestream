@@ -40,7 +40,6 @@
     "typescript": "^4.8.4"
   },
   "dependencies": {
-    "@types/json-schema": "^7.0.11",
     "debug": "^4.3.4",
     "eventemitter3": "^4.0.7",
     "lodash": "^4.17.21",

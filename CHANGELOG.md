@@ -3,6 +3,7 @@
 - BREAKING CHANGE: `processChangeStream` now takes an option object instead of a pipeline for the second argument.
 - Added `restart` fn to `runInitialScan` and `processChangeStream`.
 - Added the following options to `runInitialScan` and `processChangeStream`: `maintainHealth` and `healthCheckInterval`. When `maintainHealth` is set to `true` a failure to write a record when performing an initial scan within `healthCheckInterval` will cause `runInitialScan` to restart. When `maintainHealth` is set to `true` a failure to process the latest insert within `healthCheckInterval` when processing a change stream will cause `processChangeStream` to restart.
+- Use more generic `Record<string, any>` for type `JSONSchema`.
 
 # 0.25.0
 

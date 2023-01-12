@@ -72,6 +72,9 @@ export const initSync = (
   const omit = options.omit
   const omitPipeline = omit ? generatePipelineFromOmit(omit) : []
 
+  /**
+   * Retrieve value from Redis and parse as int if possible
+   */
   const getLastSyncedAt = (key: string) =>
     redis.get(key).then((x) => {
       if (x) {
@@ -79,6 +82,9 @@ export const initSync = (
       }
     })
 
+  /**
+   * Get the timestamp of the last record created using _id
+   */
   const getLastRecordCreatedAt = (): Promise<number | undefined> =>
     collection
       .find({})
@@ -117,12 +123,12 @@ export const initSync = (
         }
       }
       const start = () => {
-        debug('Starting initial scan health check')
+        debug('Starting health check - initial scan')
         stopped = false
         timer = setInterval(checkHealth, healthCheckInterval)
       }
       const stop = () => {
-        debug('Stopping initial scan health check')
+        debug('Stopping health check - initial scan')
         stopped = true
         clearInterval(timer)
       }
@@ -133,6 +139,7 @@ export const initSync = (
 
     const start = async () => {
       debug('Starting initial scan')
+      deferred = defer()
       aborted = false
       const sortField = options.sortField || defaultSortField
       // Redis keys
@@ -183,7 +190,6 @@ export const initSync = (
       // Process documents
       for await (const doc of cursor) {
         debug('Initial scan doc %O', doc)
-        deferred = defer()
         const changeStreamDoc = {
           fullDocument: doc,
           operationType: 'insert',
@@ -201,7 +207,7 @@ export const initSync = (
         // Record scan complete
         await redis.set(scanCompletedKey, new Date().toString())
       }
-      deferred?.done()
+      deferred.done()
       debug('Exit initial scan')
     }
 
@@ -212,7 +218,7 @@ export const initSync = (
       healthCheck.stop()
       // Close the cursor
       await cursor?.close()
-      // Wait for the queue to be flushed
+      // Wait for start fn to finish
       await deferred?.promise
       debug('Stopped initial scan')
     }
@@ -261,12 +267,12 @@ export const initSync = (
         }
       }
       const start = () => {
-        debug('Starting change stream health check')
+        debug('Starting health check - change stream')
         stopped = false
         timer = setInterval(checkHealth, healthCheckInterval)
       }
       const stop = () => {
-        debug('Stopping change stream health check')
+        debug('Stopping health check - change stream')
         stopped = true
         clearInterval(timer)
       }
@@ -277,6 +283,7 @@ export const initSync = (
 
     const start = async () => {
       debug('Starting change stream')
+      deferred = defer()
       // Redis keys
       const { changeStreamTokenKey } = keys
       // Lookup change stream token
@@ -298,7 +305,6 @@ export const initSync = (
       // Get the change stream as an async iterator
       for await (let event of iterator) {
         debug('Change stream event %O', event)
-        deferred = defer()
         // Get resume token
         const token = event?._id
         // Omit nested fields that are not handled by $unset.
@@ -316,7 +322,7 @@ export const initSync = (
           new Date().getTime()
         )
       }
-      deferred?.done()
+      deferred.done()
     }
 
     const stop = async () => {
@@ -325,7 +331,7 @@ export const initSync = (
       healthCheck.stop()
       // Close the change stream
       await changeStream?.close()
-      // Wait for event to be processed
+      // Wait for start fn to finish
       await deferred?.promise
     }
 
