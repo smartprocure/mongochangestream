@@ -2,7 +2,6 @@ import _ from 'lodash/fp.js'
 import {
   ChangeStreamInsertDocument,
   Collection,
-  Document,
   ObjectId,
   Db,
   ChangeStream,
@@ -15,6 +14,7 @@ import {
   ProcessRecords,
   ScanOptions,
   ChangeOptions,
+  ChangeStreamOptions,
   JSONSchema,
 } from './types.js'
 import _debug from 'debug'
@@ -45,11 +45,15 @@ const getKeys = (collection: Collection) => {
   const lastScanIdKey = `${collectionPrefix}:lastScanId`
   const changeStreamTokenKey = `${collectionPrefix}:changeStreamToken`
   const schemaKey = `${collectionPrefix}:schema`
+  const lastChangeProcessedAtKey = `${collectionPrefix}:lastChangeProcessedAt`
+  const lastScanProcessedAtKey = `${collectionPrefix}:lastScanProcessedAt`
   return {
     scanCompletedKey,
     lastScanIdKey,
     changeStreamTokenKey,
     schemaKey,
+    lastChangeProcessedAtKey,
+    lastScanProcessedAtKey,
   }
 }
 
@@ -68,6 +72,32 @@ export const initSync = (
   const omit = options.omit
   const omitPipeline = omit ? generatePipelineFromOmit(omit) : []
 
+  /**
+   * Retrieve value from Redis and parse as int if possible
+   */
+  const getLastSyncedAt = (key: string) =>
+    redis.get(key).then((x) => {
+      if (x) {
+        return parseInt(x, 10)
+      }
+    })
+
+  /**
+   * Get the timestamp of the last record created using _id
+   */
+  const getLastRecordCreatedAt = (): Promise<number | undefined> =>
+    collection
+      .find({})
+      .sort({ _id: -1 })
+      .project({ _id: 1 })
+      .limit(1)
+      .toArray()
+      .then((x) => {
+        if (x.length) {
+          return x[0]?._id?.getTimestamp()?.getTime()
+        }
+      })
+
   const runInitialScan = async (
     processRecords: ProcessRecords,
     options: QueueOptions & ScanOptions = {}
@@ -76,8 +106,43 @@ export const initSync = (
     let cursor: ReturnType<typeof collection.find>
     let aborted: boolean
 
+    /**
+     * Periodically check that records are being processed.
+     */
+    const maintainHealth = (healthCheckInterval = ms('1m')) => {
+      let timer: NodeJS.Timer
+      let stopped: boolean
+
+      const checkHealth = async () => {
+        debug('Checking health - initial scan')
+        const lastHealthCheck = new Date().getTime() - healthCheckInterval
+        const withinHealthCheck = (x?: number) => x && x > lastHealthCheck
+        const lastSyncedAt = await getLastSyncedAt(keys.lastScanProcessedAtKey)
+        debug('Last scan processed at %d', lastSyncedAt)
+        // Records were not synced within the health check window
+        if (!withinHealthCheck(lastSyncedAt) && !stopped) {
+          debug('Health check failed - initial scan')
+          restart()
+        }
+      }
+      const start = () => {
+        debug('Starting health check - initial scan')
+        stopped = false
+        timer = setInterval(checkHealth, healthCheckInterval)
+      }
+      const stop = () => {
+        debug('Stopping health check - initial scan')
+        stopped = true
+        clearInterval(timer)
+      }
+      return { start, stop }
+    }
+
+    const healthCheck = maintainHealth(options.healthCheckInterval)
+
     const start = async () => {
       debug('Starting initial scan')
+      deferred = defer()
       aborted = false
       const sortField = options.sortField || defaultSortField
       // Redis keys
@@ -87,8 +152,13 @@ export const initSync = (
       // Scan already completed so return
       if (scanCompleted) {
         debug(`Initial scan previously completed on %s`, scanCompleted)
+        // Exit
         return
       }
+      if (options.maintainHealth) {
+        healthCheck.start()
+      }
+
       const _processRecords = async (records: ChangeStreamInsertDocument[]) => {
         // Process batch of records
         await processRecords(records)
@@ -96,9 +166,13 @@ export const initSync = (
         // Record last id of the batch
         const lastId = _.get(sortField.field, lastDocument)
         if (lastId) {
-          await redis.set(lastScanIdKey, sortField.serialize(lastId))
+          await redis.mset(
+            lastScanIdKey,
+            sortField.serialize(lastId),
+            keys.lastScanProcessedAtKey,
+            new Date().getTime()
+          )
         }
-        deferred.done()
       }
       // Lookup last id successfully processed
       const lastId = await redis.get(lastScanIdKey)
@@ -119,7 +193,6 @@ export const initSync = (
       // Process documents
       for await (const doc of cursor) {
         debug('Initial scan doc %O', doc)
-        deferred = defer()
         const changeStreamDoc = {
           fullDocument: doc,
           operationType: 'insert',
@@ -131,50 +204,114 @@ export const initSync = (
       await queue.flush()
       // Don't record scan complete if aborted
       if (!aborted) {
+        debug('Completed initial scan')
+        // Stop the health check
+        healthCheck.stop()
         // Record scan complete
         await redis.set(scanCompletedKey, new Date().toString())
-        debug('Completed initial scan')
       }
+      deferred.done()
+      debug('Exit initial scan')
     }
 
     const stop = async () => {
       debug('Stopping initial scan')
       aborted = true
+      // Stop the health check
+      healthCheck.stop()
       // Close the cursor
       await cursor?.close()
-      // Wait for the queue to be flushed
+      // Wait for start fn to finish
       await deferred?.promise
+      debug('Stopped initial scan')
     }
 
-    return { start, stop }
+    const restart = async () => {
+      debug('Restarting initial scan')
+      await stop()
+      start()
+    }
+
+    return { start, stop, restart }
   }
 
   const defaultOptions = { fullDocument: 'updateLookup' }
 
   const processChangeStream = async (
     processRecord: ProcessRecord,
-    pipeline: Document[] = []
+    options: ChangeStreamOptions = {}
   ) => {
     let deferred: Deferred
     let changeStream: ChangeStream
+    const pipeline = options.pipeline || []
+    
+    /**
+     * Periodically check that change stream events are being processed.
+     * Only applies to records inserted into the collection.
+     */
+    const maintainHealth = (healthCheckInterval = ms('1m')) => {
+      let timer: NodeJS.Timer
+      let stopped: boolean
+
+      const checkHealth = async () => {
+        debug('Checking health - change stream')
+        const lastHealthCheck = new Date().getTime() - healthCheckInterval
+        const [lastSyncedAt, lastRecordCreatedAt] = await Promise.all([
+          getLastSyncedAt(keys.lastChangeProcessedAtKey),
+          getLastRecordCreatedAt(),
+        ])
+        debug('Last change processed at %d', lastSyncedAt)
+        debug('Last record created at %d', lastRecordCreatedAt)
+        const withinHealthCheck = (x?: number) => x && x > lastHealthCheck
+        // A record was created within the health check window but not synced
+        if (
+          withinHealthCheck(lastRecordCreatedAt) &&
+          !withinHealthCheck(lastSyncedAt) &&
+          !stopped
+        ) {
+          debug('Health check failed - change stream')
+          restart()
+        }
+      }
+      const start = () => {
+        debug('Starting health check - change stream')
+        stopped = false
+        timer = setInterval(checkHealth, healthCheckInterval)
+      }
+      const stop = () => {
+        debug('Stopping health check - change stream')
+        stopped = true
+        clearInterval(timer)
+      }
+      return { start, stop }
+    }
+
+    const healthCheck = maintainHealth(options.healthCheckInterval)
 
     const start = async () => {
       debug('Starting change stream')
+      deferred = defer()
       // Redis keys
       const { changeStreamTokenKey } = keys
       // Lookup change stream token
       const token = await redis.get(changeStreamTokenKey)
-      const options = token
+      const changeStreamOptions = token
         ? // Resume token found, so set change stream resume point
           { ...defaultOptions, resumeAfter: JSON.parse(token) }
         : defaultOptions
       // Start the change stream
-      changeStream = collection.watch([...omitPipeline, ...pipeline], options)
+      changeStream = collection.watch(
+        [...omitPipeline, ...pipeline],
+        changeStreamOptions
+      )
       const iterator = toIterator(changeStream)
+      // Start the health check
+      if (options.maintainHealth) {
+        healthCheck.start()
+      }
       // Get the change stream as an async iterator
       for await (let event of iterator) {
         debug('Change stream event %O', event)
-        deferred = defer()
         // Get resume token
         const token = event?._id
         // Omit nested fields that are not handled by $unset.
@@ -185,19 +322,33 @@ export const initSync = (
         // Process record
         await processRecord(event)
         // Update change stream token
-        await redis.set(changeStreamTokenKey, JSON.stringify(token))
-        deferred.done()
+        await redis.mset(
+          changeStreamTokenKey,
+          JSON.stringify(token),
+          keys.lastChangeProcessedAtKey,
+          new Date().getTime()
+        )
       }
+      deferred.done()
     }
 
     const stop = async () => {
       debug('Stopping change stream')
+      // Stop the health check
+      healthCheck.stop()
+      // Close the change stream
       await changeStream?.close()
-      // Wait for event to be processed
+      // Wait for start fn to finish
       await deferred?.promise
     }
 
-    return { start, stop }
+    const restart = async () => {
+      debug('Restarting change stream')
+      await stop()
+      start()
+    }
+
+    return { start, stop, restart }
   }
 
   const reset = async () => {
