@@ -115,7 +115,6 @@ export const initSync = (
           debug('Health check failed - initial scan')
           restart()
         }
-        debug('Health check passed - initial scan')
       }
       const start = () => {
         debug('Starting initial scan health check')
@@ -260,7 +259,6 @@ export const initSync = (
           debug('Health check failed - change stream')
           restart()
         }
-        debug('Health check passed - change stream')
       }
       const start = () => {
         debug('Starting change stream health check')
