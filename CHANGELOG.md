@@ -1,3 +1,8 @@
+# 0.27.0
+
+- BREAKING CHANGE: Moved emitter to top level.
+- Emit event `healthCheckFail` if a health check fails.
+
 # 0.26.1
 
 - `Document` type should refer to type from `mongodb` not DOM.

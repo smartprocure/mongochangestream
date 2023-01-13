@@ -71,6 +71,10 @@ export const initSync = (
   const keys = getKeys(collection)
   const omit = options.omit
   const omitPipeline = omit ? generatePipelineFromOmit(omit) : []
+  const emitter = new EventEmitter<Events>()
+  const emit = (event: Events, data: object) => {
+    emitter.emit(event, { type: event, ...data })
+  }
 
   /**
    * Retrieve value from Redis and parse as int if possible
@@ -122,6 +126,7 @@ export const initSync = (
         // Records were not synced within the health check window
         if (!withinHealthCheck(lastSyncedAt) && !stopped) {
           debug('Health check failed - initial scan')
+          emit('healthCheckFail', { initialScan: true, lastSyncedAt })
           restart()
         }
       }
@@ -244,7 +249,7 @@ export const initSync = (
     let deferred: Deferred
     let changeStream: ChangeStream
     const pipeline = options.pipeline || []
-    
+
     /**
      * Periodically check that change stream events are being processed.
      * Only applies to records inserted into the collection.
@@ -264,12 +269,19 @@ export const initSync = (
         debug('Last record created at %d', lastRecordCreatedAt)
         const withinHealthCheck = (x?: number) => x && x > lastHealthCheck
         // A record was created within the health check window but not synced
+        // NOTE: It is possible for a record to be created a the end of the window
+        // but not synced before the next health check leading to an unnecessary restart.
         if (
           withinHealthCheck(lastRecordCreatedAt) &&
           !withinHealthCheck(lastSyncedAt) &&
           !stopped
         ) {
           debug('Health check failed - change stream')
+          emit('healthCheckFail', {
+            changeStream: true,
+            lastRecordCreatedAt,
+            lastSyncedAt,
+          })
           restart()
         }
       }
@@ -373,7 +385,6 @@ export const initSync = (
     const shouldRemoveMetadata = options.shouldRemoveMetadata
     const maybeRemoveMetadata = when(shouldRemoveMetadata, removeMetadata)
 
-    const emitter = new EventEmitter<Events>()
     let timer: NodeJS.Timer
     // Check for a cached schema
     let previousSchema = await getCachedCollectionSchema().then(
@@ -397,7 +408,7 @@ export const initSync = (
         // Persist schema
         await redis.set(keys.schemaKey, JSON.stringify(currentSchema))
         // Emit change
-        emitter.emit('change', { previousSchema, currentSchema })
+        emit('change', { previousSchema, currentSchema })
         // Previous schema is now the current schema
         previousSchema = currentSchema
       }
@@ -413,7 +424,7 @@ export const initSync = (
       debug('Stopping polling for schema changes')
       clearInterval(timer)
     }
-    return { start, stop, emitter }
+    return { start, stop }
   }
 
   return {
@@ -455,5 +466,7 @@ export const initSync = (
      * Redis keys used for the collection.
      */
     keys,
+    /** Event emitter */
+    emitter,
   }
 }

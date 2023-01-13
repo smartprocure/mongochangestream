@@ -44,4 +44,4 @@ export interface ChangeOptions {
 
 export type JSONSchema = Record<string, any>
 
-export type Events = 'change'
+export type Events = 'change' | 'healthCheckFail'
