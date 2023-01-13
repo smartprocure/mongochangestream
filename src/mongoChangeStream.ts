@@ -71,7 +71,7 @@ export const initSync = (
   const keys = getKeys(collection)
   const omit = options.omit
   const omitPipeline = omit ? generatePipelineFromOmit(omit) : []
-  const emitter = new EventEmitter<Events>()
+  const emitter = new EventEmitter()
   const emit = (event: Events, data: object) => {
     emitter.emit(event, { type: event, ...data })
   }

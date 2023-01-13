@@ -1,3 +1,7 @@
+# 0.28.0
+
+- Don't type event emitter so that it can be reused by downstream libraries like `mongo2crate` and `mongo2elastic`.
+
 # 0.27.0
 
 - BREAKING CHANGE: Moved emitter to top level.
