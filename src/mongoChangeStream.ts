@@ -408,7 +408,7 @@ export const initSync = (
         // Persist schema
         await redis.set(keys.schemaKey, JSON.stringify(currentSchema))
         // Emit change
-        emit('change', { previousSchema, currentSchema })
+        emit('schemaChange', { previousSchema, currentSchema })
         // Previous schema is now the current schema
         previousSchema = currentSchema
       }

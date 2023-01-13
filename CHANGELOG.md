@@ -1,3 +1,7 @@
+# 0.29.0
+
+- Make schema change event more specific - `change` is now `schemaChange`.
+
 # 0.28.0
 
 - Don't type event emitter so that it can be reused by downstream libraries like `mongo2crate` and `mongo2elastic`.
