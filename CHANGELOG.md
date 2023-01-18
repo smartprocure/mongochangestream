@@ -1,3 +1,9 @@
+# 0.30.0
+
+- Fixed bug preventing a previously completed initial scan from being stopped once restarted.
+- Renamed `maintainHealth` to `enableHealthCheck`.
+- Health check only emits now. You must call `restart` manually to reproduce the previous behavior.
+
 # 0.29.0
 
 - Make schema change event more specific - `change` is now `schemaChange`.

@@ -17,7 +17,7 @@ export interface SyncOptions {
 
 export interface ScanOptions<T = any> {
   /** Set to true to run a health check in the background. */
-  maintainHealth?: boolean
+  enableHealthCheck?: boolean
   /** How often to run the health check. */
   healthCheckInterval?: number
   sortField?: {
@@ -29,7 +29,7 @@ export interface ScanOptions<T = any> {
 
 export interface ChangeStreamOptions {
   /** Set to true to run a health check in the background. */
-  maintainHealth?: boolean
+  enableHealthCheck?: boolean
   /** How often to run the health check. */
   healthCheckInterval?: number
   pipeline?: Document[]

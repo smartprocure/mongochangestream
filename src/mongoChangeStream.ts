@@ -113,11 +113,11 @@ export const initSync = (
     /**
      * Periodically check that records are being processed.
      */
-    const maintainHealth = (healthCheckInterval = ms('1m')) => {
+    const healthChecker = (healthCheckInterval = ms('1m')) => {
       let timer: NodeJS.Timer
       let stopped: boolean
 
-      const checkHealth = async () => {
+      const runHealthCheck = async () => {
         debug('Checking health - initial scan')
         const lastHealthCheck = new Date().getTime() - healthCheckInterval
         const withinHealthCheck = (x?: number) => x && x > lastHealthCheck
@@ -127,13 +127,12 @@ export const initSync = (
         if (!withinHealthCheck(lastSyncedAt) && !stopped) {
           debug('Health check failed - initial scan')
           emit('healthCheckFail', { initialScan: true, lastSyncedAt })
-          restart()
         }
       }
       const start = () => {
         debug('Starting health check - initial scan')
         stopped = false
-        timer = setInterval(checkHealth, healthCheckInterval)
+        timer = setInterval(runHealthCheck, healthCheckInterval)
       }
       const stop = () => {
         debug('Stopping health check - initial scan')
@@ -143,7 +142,7 @@ export const initSync = (
       return { start, stop }
     }
 
-    const healthCheck = maintainHealth(options.healthCheckInterval)
+    const healthCheck = healthChecker(options.healthCheckInterval)
 
     const start = async () => {
       debug('Starting initial scan')
@@ -157,10 +156,12 @@ export const initSync = (
       // Scan already completed so return
       if (scanCompleted) {
         debug(`Initial scan previously completed on %s`, scanCompleted)
-        // Exit
+        // We're done
+        deferred.done()
         return
       }
-      if (options.maintainHealth) {
+      // Start the health check
+      if (options.enableHealthCheck) {
         healthCheck.start()
       }
 
@@ -226,6 +227,7 @@ export const initSync = (
       healthCheck.stop()
       // Close the cursor
       await cursor?.close()
+      debug('MongoDB cursor closed')
       // Wait for start fn to finish
       await deferred?.promise
       debug('Stopped initial scan')
@@ -254,11 +256,11 @@ export const initSync = (
      * Periodically check that change stream events are being processed.
      * Only applies to records inserted into the collection.
      */
-    const maintainHealth = (healthCheckInterval = ms('1m')) => {
+    const healthChecker = (healthCheckInterval = ms('1m')) => {
       let timer: NodeJS.Timer
       let stopped: boolean
 
-      const checkHealth = async () => {
+      const runHealthCheck = async () => {
         debug('Checking health - change stream')
         const lastHealthCheck = new Date().getTime() - healthCheckInterval
         const [lastSyncedAt, lastRecordCreatedAt] = await Promise.all([
@@ -268,9 +270,9 @@ export const initSync = (
         debug('Last change processed at %d', lastSyncedAt)
         debug('Last record created at %d', lastRecordCreatedAt)
         const withinHealthCheck = (x?: number) => x && x > lastHealthCheck
-        // A record was created within the health check window but not synced
+        // A record was created within the health check window but not synced.
         // NOTE: It is possible for a record to be created a the end of the window
-        // but not synced before the next health check leading to an unnecessary restart.
+        // but not synced before the next health check leading to a false failure.
         if (
           withinHealthCheck(lastRecordCreatedAt) &&
           !withinHealthCheck(lastSyncedAt) &&
@@ -282,13 +284,12 @@ export const initSync = (
             lastRecordCreatedAt,
             lastSyncedAt,
           })
-          restart()
         }
       }
       const start = () => {
         debug('Starting health check - change stream')
         stopped = false
-        timer = setInterval(checkHealth, healthCheckInterval)
+        timer = setInterval(runHealthCheck, healthCheckInterval)
       }
       const stop = () => {
         debug('Stopping health check - change stream')
@@ -298,7 +299,7 @@ export const initSync = (
       return { start, stop }
     }
 
-    const healthCheck = maintainHealth(options.healthCheckInterval)
+    const healthCheck = healthChecker(options.healthCheckInterval)
 
     const start = async () => {
       debug('Starting change stream')
@@ -318,7 +319,7 @@ export const initSync = (
       )
       const iterator = toIterator(changeStream)
       // Start the health check
-      if (options.maintainHealth) {
+      if (options.enableHealthCheck) {
         healthCheck.start()
       }
       // Get the change stream as an async iterator
@@ -350,8 +351,10 @@ export const initSync = (
       healthCheck.stop()
       // Close the change stream
       await changeStream?.close()
+      debug('MongoDB change stream closed')
       // Wait for start fn to finish
       await deferred?.promise
+      debug('Stopped change stream')
     }
 
     const restart = async () => {
@@ -364,6 +367,7 @@ export const initSync = (
   }
 
   const reset = async () => {
+    debug('Reset')
     await redis.del(...Object.values(keys))
   }
 
