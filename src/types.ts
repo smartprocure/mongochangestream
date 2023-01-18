@@ -42,6 +42,24 @@ export interface ChangeOptions {
   shouldRemoveMetadata?: boolean
 }
 
+interface InitialScanFailEvent {
+  failureType: 'initialScan'
+  lastSyncedAt: number
+}
+
+interface ChangeStreamFailEvent {
+  failureType: 'changeStream'
+  lastRecordCreatedAt: number
+  lastSyncedAt: number
+}
+
+export type HealthCheckFailEvent = InitialScanFailEvent | ChangeStreamFailEvent
+
+export interface SchemaChangeEvent {
+ previousSchema?: JSONSchema
+ currentSchema: JSONSchema
+}
+
 export type JSONSchema = Record<string, any>
 
 export type Events = 'schemaChange' | 'healthCheckFail'

@@ -1,3 +1,9 @@
+# 0.31.0
+
+- Explicit types for health check failure.
+- Emit the following field to differentiate failure types:
+`failureType` with values `initialScan` and `changeStream`.
+
 # 0.30.0
 
 - Fixed bug preventing a previously completed initial scan from being stopped once restarted.

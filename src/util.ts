@@ -36,7 +36,7 @@ export const traverseSchema = (x: JSONSchema) =>
 /**
  * Remove title and description from a JSON schema.
  */
-export const removeMetadata = (schema: JSONSchema) => {
+export const removeMetadata = (schema: JSONSchema): JSONSchema => {
   const walkFn = ({ val }: Node) => {
     if ('title' in val) {
       delete val.title

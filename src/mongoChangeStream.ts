@@ -16,6 +16,8 @@ import {
   ChangeOptions,
   ChangeStreamOptions,
   JSONSchema,
+  HealthCheckFailEvent,
+  SchemaChangeEvent,
 } from './types.js'
 import _debug from 'debug'
 import type { Redis } from 'ioredis'
@@ -126,7 +128,10 @@ export const initSync = (
         // Records were not synced within the health check window
         if (!withinHealthCheck(lastSyncedAt) && !stopped) {
           debug('Health check failed - initial scan')
-          emit('healthCheckFail', { initialScan: true, lastSyncedAt })
+          emit('healthCheckFail', {
+            failureType: 'initialScan',
+            lastSyncedAt,
+          } as HealthCheckFailEvent)
         }
       }
       const start = () => {
@@ -280,10 +285,10 @@ export const initSync = (
         ) {
           debug('Health check failed - change stream')
           emit('healthCheckFail', {
-            changeStream: true,
+            failureType: 'changeStream',
             lastRecordCreatedAt,
             lastSyncedAt,
-          })
+          } as HealthCheckFailEvent)
         }
       }
       const start = () => {
@@ -391,9 +396,11 @@ export const initSync = (
 
     let timer: NodeJS.Timer
     // Check for a cached schema
-    let previousSchema = await getCachedCollectionSchema().then(
-      (schema) => schema && maybeRemoveMetadata(schema)
-    )
+    let previousSchema = await getCachedCollectionSchema().then((schema) => {
+      if (schema) {
+        return maybeRemoveMetadata(schema)
+      }
+    })
     if (!previousSchema) {
       const schema = await getCollectionSchema(db).then(maybeRemoveMetadata)
       // Persist schema
@@ -412,7 +419,10 @@ export const initSync = (
         // Persist schema
         await redis.set(keys.schemaKey, JSON.stringify(currentSchema))
         // Emit change
-        emit('schemaChange', { previousSchema, currentSchema })
+        emit('schemaChange', {
+          previousSchema,
+          currentSchema,
+        } as SchemaChangeEvent)
         // Previous schema is now the current schema
         previousSchema = currentSchema
       }
