@@ -1,8 +1,12 @@
+# 0.32.0
+
+- Better handling of state transitions.
+
 # 0.31.0
 
 - Explicit types for health check failure.
 - Emit the following field to differentiate failure types:
-`failureType` with values `initialScan` and `changeStream`.
+  `failureType` with values `initialScan` and `changeStream`.
 
 # 0.30.0
 
@@ -50,7 +54,7 @@
 
 - Option to strip metadata from a JSON schema for `detectSchemaChange`.
 - You can now await `changeStream.start` which resolves after the initial
-change detection has completed.
+  change detection has completed.
 
 # 0.21.0
 
@@ -63,15 +67,15 @@ change detection has completed.
 # 0.19.1
 
 - Fix issue with `runInitialScan` where calling `stop` before the scan had finished
-would incorrectly set the scan completed key in Redis. Also, `stop` now awaits flushing
-the queue.
+  would incorrectly set the scan completed key in Redis. Also, `stop` now awaits flushing
+  the queue.
 
 # 0.19.0
 
 - BREAKING CHANGE: Changed API for `runInitialScan`. You must explicitly call `start` now.
-The change stream can be stopped by calling `stop`.
+  The change stream can be stopped by calling `stop`.
 - It is now possible to cleanly stop `runInitialScan` and `processChangeStream`, allowing
-for a smooth restarting behavior if a schema change is detected.
+  for a smooth restarting behavior if a schema change is detected.
 
 # 0.18.0
 
@@ -85,7 +89,7 @@ for a smooth restarting behavior if a schema change is detected.
 # 0.16.0
 
 - BREAKING CHANGE: Changed API for `processChangeStream`. You must explicitly call `start` now.
-The change stream can be stopped by calling `stop`.
+  The change stream can be stopped by calling `stop`.
 
 # 0.15.0
 

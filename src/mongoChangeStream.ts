@@ -18,6 +18,7 @@ import {
   JSONSchema,
   HealthCheckFailEvent,
   SchemaChangeEvent,
+  State,
 } from './types.js'
 import _debug from 'debug'
 import type { Redis } from 'ioredis'
@@ -29,6 +30,7 @@ import {
   removeMetadata,
   setDefaults,
   when,
+  manageState,
 } from './util.js'
 import EventEmitter from 'eventemitter3'
 import ms from 'ms'
@@ -63,6 +65,13 @@ export const defaultSortField = {
   field: '_id',
   serialize: _.toString,
   deserialize: (x: string) => new ObjectId(x),
+}
+
+const stateTransitions = {
+  stopped: ['starting'],
+  starting: ['started'],
+  started: ['stopping'],
+  stopping: ['stopped'],
 }
 
 export const initSync = (
@@ -110,7 +119,11 @@ export const initSync = (
   ) => {
     let deferred: Deferred
     let cursor: ReturnType<typeof collection.find>
-    let aborted: boolean
+    const state = manageState<State>(
+      stateTransitions,
+      'stopped',
+      'Initial scan'
+    )
 
     /**
      * Periodically check that records are being processed.
@@ -151,8 +164,17 @@ export const initSync = (
 
     const start = async () => {
       debug('Starting initial scan')
+      // Nothing to do
+      if (state.is('starting', 'started')) {
+        debug('Initial scan already starting or started')
+        return
+      }
+      if (state.is('stopping')) {
+        // Wait until stopping -> stopped
+        await state.waitForChange('stopped')
+      }
+      state.change('starting')
       deferred = defer()
-      aborted = false
       const sortField = options.sortField || defaultSortField
       // Redis keys
       const { scanCompletedKey, lastScanIdKey } = keys
@@ -163,6 +185,7 @@ export const initSync = (
         debug(`Initial scan previously completed on %s`, scanCompleted)
         // We're done
         deferred.done()
+        state.change('started')
         return
       }
       // Start the health check
@@ -200,6 +223,8 @@ export const initSync = (
           omit ? { projection: setDefaults(omit, 0) } : {}
         )
         .sort({ [sortField.field]: 1 })
+      // Change state
+      state.change('started')
       const ns = { db: collection.dbName, coll: collection.collectionName }
       // Process documents
       for await (const doc of cursor) {
@@ -213,8 +238,8 @@ export const initSync = (
       }
       // Flush the queue
       await queue.flush()
-      // Don't record scan complete if aborted
-      if (!aborted) {
+      // Don't record scan complete if stopping
+      if (!state.is('stopping')) {
         debug('Completed initial scan')
         // Stop the health check
         healthCheck.stop()
@@ -227,7 +252,16 @@ export const initSync = (
 
     const stop = async () => {
       debug('Stopping initial scan')
-      aborted = true
+      // Nothing to do
+      if (state.is('stopping', 'stopped')) {
+        debug('Initial scan already stopping or stopped')
+        return
+      }
+      if (state.is('starting')) {
+        // Wait until starting -> started
+        await state.waitForChange('started')
+      }
+      state.change('stopping')
       // Stop the health check
       healthCheck.stop()
       // Close the cursor
@@ -235,6 +269,7 @@ export const initSync = (
       debug('MongoDB cursor closed')
       // Wait for start fn to finish
       await deferred?.promise
+      state.change('stopped')
       debug('Stopped initial scan')
     }
 
@@ -255,6 +290,11 @@ export const initSync = (
   ) => {
     let deferred: Deferred
     let changeStream: ChangeStream
+    const state = manageState<State>(
+      stateTransitions,
+      'stopped',
+      'Change stream'
+    )
     const pipeline = options.pipeline || []
 
     /**
@@ -308,6 +348,17 @@ export const initSync = (
 
     const start = async () => {
       debug('Starting change stream')
+      // Nothing to do
+      if (state.is('starting', 'started')) {
+        debug('Change stream already starting or started')
+        return
+      }
+      if (state.is('stopping')) {
+        // Wait until stopping -> stopped
+        await state.waitForChange('stopped')
+      }
+      state.change('starting')
+      // New deferred
       deferred = defer()
       // Redis keys
       const { changeStreamTokenKey } = keys
@@ -323,6 +374,7 @@ export const initSync = (
         changeStreamOptions
       )
       const iterator = toIterator(changeStream)
+      state.change('started')
       // Start the health check
       if (options.enableHealthCheck) {
         healthCheck.start()
@@ -348,10 +400,21 @@ export const initSync = (
         )
       }
       deferred.done()
+      debug('Exit change stream')
     }
 
     const stop = async () => {
       debug('Stopping change stream')
+      // Nothing to do
+      if (state.is('stopping', 'stopped')) {
+        debug('Change stream already stopping or stopped')
+        return
+      }
+      if (state.is('starting')) {
+        // Wait until starting -> started
+        await state.waitForChange('started')
+      }
+      state.change('stopping')
       // Stop the health check
       healthCheck.stop()
       // Close the change stream
@@ -359,6 +422,7 @@ export const initSync = (
       debug('MongoDB change stream closed')
       // Wait for start fn to finish
       await deferred?.promise
+      state.change('stopped')
       debug('Stopped change stream')
     }
 

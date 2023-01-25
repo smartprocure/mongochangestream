@@ -1,7 +1,14 @@
 import { Collection } from 'mongodb'
 import _ from 'lodash/fp.js'
 import { Node, walkie } from 'obj-walker'
-import { JSONSchema } from './types'
+import { JSONSchema, StateTransitions } from './types'
+import { waitUntil } from 'async-wait-until'
+import _debug from 'debug'
+import makeError from 'make-error'
+
+export const StateError = makeError('StateError')
+
+const debug = _debug('mongochangestream')
 
 export const setDefaults = (keys: string[], val: any) => {
   const obj: Record<string, any> = {}
@@ -52,4 +59,36 @@ export function when<T, R>(condition: any, fn: (x: T) => R) {
   return function (x: T) {
     return condition ? fn(x) : x
   }
+}
+
+export function manageState<T extends string>(
+  stateTransitions: StateTransitions,
+  initState: T,
+  entity: string
+) {
+  let state = initState
+
+  const is = (...states: T[]) => states.includes(state)
+
+  const change = (newState: T) => {
+    debug('%s state change from %s to %s', entity, state, newState)
+    if (!stateTransitions[state]?.includes(newState)) {
+      throw new StateError(
+        `${entity} invalid state transition - ${state} to ${newState}`
+      )
+    }
+    state = newState
+  }
+
+  const waitForChange = (...newStates: T[]) => {
+    debug(
+      '%s waiting for state change from %s to %s',
+      entity,
+      state,
+      newStates.join(' or ')
+    )
+    return waitUntil(() => newStates.includes(state))
+  }
+
+  return { change, waitForChange, is }
 }
