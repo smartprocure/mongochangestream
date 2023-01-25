@@ -1,3 +1,6 @@
+/**
+ * To run: MONGO_CONN="[conn string]" node dist/mongoChangeStream.test.js
+ */
 import _ from 'lodash/fp'
 import { test } from 'node:test'
 import assert from 'node:assert'
