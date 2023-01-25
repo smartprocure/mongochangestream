@@ -30,7 +30,7 @@ import {
   removeMetadata,
   setDefaults,
   when,
-  manageState,
+  fsm,
 } from './util.js'
 import EventEmitter from 'eventemitter3'
 import ms from 'ms'
@@ -119,11 +119,7 @@ export const initSync = (
   ) => {
     let deferred: Deferred
     let cursor: ReturnType<typeof collection.find>
-    const state = manageState<State>(
-      stateTransitions,
-      'stopped',
-      'Initial scan'
-    )
+    const state = fsm<State>(stateTransitions, 'stopped', 'Initial scan')
 
     /**
      * Periodically check that records are being processed.
@@ -290,11 +286,7 @@ export const initSync = (
   ) => {
     let deferred: Deferred
     let changeStream: ChangeStream
-    const state = manageState<State>(
-      stateTransitions,
-      'stopped',
-      'Change stream'
-    )
+    const state = fsm<State>(stateTransitions, 'stopped', 'Change stream')
     const pipeline = options.pipeline || []
 
     /**

@@ -61,7 +61,7 @@ export function when<T, R>(condition: any, fn: (x: T) => R) {
   }
 }
 
-export function manageState<T extends string>(
+export function fsm<T extends string>(
   stateTransitions: StateTransitions,
   initState: T,
   entity: string
