@@ -19,6 +19,7 @@ import {
   HealthCheckFailEvent,
   SchemaChangeEvent,
   State,
+  StateTransitions,
 } from './types.js'
 import _debug from 'debug'
 import type { Redis } from 'ioredis'
@@ -67,7 +68,7 @@ export const defaultSortField = {
   deserialize: (x: string) => new ObjectId(x),
 }
 
-const stateTransitions = {
+const stateTransitions: StateTransitions<State> = {
   stopped: ['starting'],
   starting: ['started'],
   started: ['stopping'],

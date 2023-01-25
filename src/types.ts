@@ -66,4 +66,4 @@ export type Events = 'schemaChange' | 'healthCheckFail'
 
 export type State = 'starting' | 'started' | 'stopping' | 'stopped'
 
-export type StateTransitions = Record<string, string[]>
+export type StateTransitions<T extends string> = Record<T, T[]>

@@ -62,7 +62,7 @@ export function when<T, R>(condition: any, fn: (x: T) => R) {
 }
 
 export function fsm<T extends string>(
-  stateTransitions: StateTransitions,
+  stateTransitions: StateTransitions<T>,
   initState: T,
   entity: string
 ) {
