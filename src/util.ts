@@ -90,5 +90,19 @@ export function manageState<T extends string>(
     return waitUntil(() => newStates.includes(state))
   }
 
-  return { change, waitForChange, is }
+  return {
+    /**
+     * Transition state to `newState`. Throws if `newState` is not a valid
+     * transitional state for the current state.
+     */
+    change,
+    /**
+     * Wait for state to change to one of `newStates`. Times out after 5 seconds.
+     */
+    waitForChange,
+    /**
+     * Is state currently one of `states`.
+     */
+    is,
+  }
 }
