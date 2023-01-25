@@ -71,13 +71,14 @@ export function manageState<T extends string>(
   const is = (...states: T[]) => states.includes(state)
 
   const change = (newState: T) => {
-    debug('%s state change from %s to %s', entity, state, newState)
+    debug('%s changing state from %s to %s', entity, state, newState)
     if (!stateTransitions[state]?.includes(newState)) {
       throw new StateError(
         `${entity} invalid state transition - ${state} to ${newState}`
       )
     }
     state = newState
+    debug('%s changed state to %s', entity, newState)
   }
 
   const waitForChange = (...newStates: T[]) => {
