@@ -122,6 +122,9 @@ export const initSync = (
     let cursor: ReturnType<typeof collection.find>
     const state = fsm<State>(stateTransitions, 'stopped', {
       name: 'Initial scan',
+      onStateChange(change) {
+        emit('stateChange', change)
+      },
     })
 
     /**
@@ -291,6 +294,9 @@ export const initSync = (
     let changeStream: ChangeStream
     const state = fsm<State>(stateTransitions, 'stopped', {
       name: 'Change stream',
+      onStateChange(change) {
+        emit('stateChange', change)
+      },
     })
     const pipeline = options.pipeline || []
 

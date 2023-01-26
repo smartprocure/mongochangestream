@@ -1,7 +1,7 @@
 import { Collection } from 'mongodb'
 import _ from 'lodash/fp.js'
 import { Node, walkie } from 'obj-walker'
-import { JSONSchema, StateTransitions } from './types'
+import { FsmOptions, JSONSchema, StateTransitions } from './types'
 import { waitUntil, Options } from 'async-wait-until'
 import _debug from 'debug'
 import makeError from 'make-error'
@@ -70,10 +70,11 @@ export function when<T, R>(condition: any, fn: (x: T) => R) {
 export function fsm<T extends string>(
   stateTransitions: StateTransitions<T>,
   initState: T,
-  options: Options & { name?: string } = {}
+  options: Options & FsmOptions<T> = {}
 ) {
   let state = initState
   const name = options.name || 'fsm'
+  const onStateChange = options.onStateChange
 
   const is = (...states: T[]) => states.includes(state)
 
@@ -84,8 +85,12 @@ export function fsm<T extends string>(
         `${name} invalid state transition - ${state} to ${newState}`
       )
     }
+    const oldState = state
     state = newState
-    debug('%s changed state to %s', name, newState)
+    debug('%s changed state from %s to %s', name, oldState, newState)
+    if (onStateChange) {
+      onStateChange({ name, from: oldState, to: newState })
+    }
   }
 
   const waitForChange = (...newStates: T[]) => {
