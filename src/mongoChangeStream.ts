@@ -19,7 +19,6 @@ import {
   HealthCheckFailEvent,
   SchemaChangeEvent,
   State,
-  StateTransitions,
 } from './types.js'
 import _debug from 'debug'
 import type { Redis } from 'ioredis'
@@ -31,10 +30,10 @@ import {
   removeMetadata,
   setDefaults,
   when,
-  fsm,
 } from './util.js'
 import EventEmitter from 'eventemitter3'
 import ms from 'ms'
+import { fsm, StateTransitions } from 'simple-machines'
 
 const debug = _debug('mongochangestream')
 

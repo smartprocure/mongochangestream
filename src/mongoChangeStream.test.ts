@@ -21,7 +21,10 @@ const init = _.memoize(async () => {
   const client = await MongoClient.connect(process.env.MONGO_CONN as string)
   const db = client.db()
   const coll = db.collection('testing')
-  return { sync: initSync(redis, coll), coll }
+  const sync = initSync(redis, coll)
+  sync.emitter.on('stateChange', console.log)
+
+  return { sync, coll }
 })
 
 const genUser = () => ({
