@@ -56,10 +56,12 @@ interface ChangeStreamFailEvent {
 export type HealthCheckFailEvent = InitialScanFailEvent | ChangeStreamFailEvent
 
 export interface SchemaChangeEvent {
- previousSchema?: JSONSchema
- currentSchema: JSONSchema
+  previousSchema?: JSONSchema
+  currentSchema: JSONSchema
 }
 
 export type JSONSchema = Record<string, any>
 
-export type Events = 'schemaChange' | 'healthCheckFail'
+export type Events = 'schemaChange' | 'healthCheckFail' | 'stateChange'
+
+export type State = 'starting' | 'started' | 'stopping' | 'stopped'
