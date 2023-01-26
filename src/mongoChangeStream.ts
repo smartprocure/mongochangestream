@@ -120,7 +120,9 @@ export const initSync = (
   ) => {
     let deferred: Deferred
     let cursor: ReturnType<typeof collection.find>
-    const state = fsm<State>(stateTransitions, 'stopped', 'Initial scan')
+    const state = fsm<State>(stateTransitions, 'stopped', {
+      name: 'Initial scan',
+    })
 
     /**
      * Periodically check that records are being processed.
@@ -287,7 +289,9 @@ export const initSync = (
   ) => {
     let deferred: Deferred
     let changeStream: ChangeStream
-    const state = fsm<State>(stateTransitions, 'stopped', 'Change stream')
+    const state = fsm<State>(stateTransitions, 'stopped', {
+      name: 'Change stream',
+    })
     const pipeline = options.pipeline || []
 
     /**
