@@ -62,6 +62,11 @@ export interface SchemaChangeEvent {
 
 export type JSONSchema = Record<string, any>
 
-export type Events = 'schemaChange' | 'healthCheckFail' | 'stateChange'
+export type Events =
+  | 'schemaChange'
+  | 'healthCheckFail'
+  | 'stateChange'
+  | 'resync'
 
 export type State = 'starting' | 'started' | 'stopping' | 'stopped'
+export type SimpleState = 'started' | 'stopped'

@@ -6,7 +6,6 @@ import {
   Db,
   ChangeStream,
 } from 'mongodb'
-import toIterator from './changeStreamToIterator.js'
 import {
   Events,
   SyncOptions,
@@ -19,6 +18,7 @@ import {
   HealthCheckFailEvent,
   SchemaChangeEvent,
   State,
+  SimpleState,
 } from './types.js'
 import _debug from 'debug'
 import type { Redis } from 'ioredis'
@@ -28,6 +28,7 @@ import {
   getCollectionKey,
   omitFieldForUpdate,
   removeMetadata,
+  safelyCheckNext,
   setDefaults,
   when,
 } from './util.js'
@@ -42,7 +43,7 @@ const keyPrefix = 'mongoChangeStream'
 /**
  * Get Redis keys used for the collection.
  */
-const getKeys = (collection: Collection) => {
+export const getKeys = (collection: Collection) => {
   const collectionKey = getCollectionKey(collection)
   const collectionPrefix = `${keyPrefix}:${collectionKey}`
   const scanCompletedKey = `${collectionPrefix}:initialScanCompletedOn`
@@ -51,6 +52,7 @@ const getKeys = (collection: Collection) => {
   const schemaKey = `${collectionPrefix}:schema`
   const lastChangeProcessedAtKey = `${collectionPrefix}:lastChangeProcessedAt`
   const lastScanProcessedAtKey = `${collectionPrefix}:lastScanProcessedAt`
+  const resyncKey = `${collectionPrefix}:resync`
   return {
     scanCompletedKey,
     lastScanIdKey,
@@ -58,6 +60,7 @@ const getKeys = (collection: Collection) => {
     schemaKey,
     lastChangeProcessedAtKey,
     lastScanProcessedAtKey,
+    resyncKey,
   }
 }
 
@@ -74,17 +77,60 @@ const stateTransitions: StateTransitions<State> = {
   stopping: ['stopped'],
 }
 
+const simpleStateTransistions: StateTransitions<SimpleState> = {
+  started: ['stopped'],
+  stopped: ['started'],
+}
+
 export const initSync = (
   redis: Redis,
   collection: Collection,
   options: SyncOptions = {}
 ) => {
   const keys = getKeys(collection)
-  const omit = options.omit
+  const { omit } = options
   const omitPipeline = omit ? generatePipelineFromOmit(omit) : []
   const emitter = new EventEmitter()
   const emit = (event: Events, data: object) => {
     emitter.emit(event, { type: event, ...data })
+  }
+  const emitStateChange = (change: object) => emit('stateChange', change)
+
+  // Detect if resync flag is set
+  const detectResync = (resyncCheckInterval = ms('1m')) => {
+    let resyncTimer: NodeJS.Timer
+    const state = fsm(simpleStateTransistions, 'stopped', {
+      name: 'Resync',
+      onStateChange: emitStateChange,
+    })
+
+    const shouldResync = () => redis.exists(keys.resyncKey)
+
+    const start = () => {
+      debug('Starting resync check')
+      if (state.is('started')) {
+        return
+      }
+      // Check periodically if the collection should be resynced
+      resyncTimer = setInterval(async () => {
+        if (await shouldResync()) {
+          debug('Resync triggered')
+          emit('resync', {})
+        }
+      }, resyncCheckInterval)
+      state.change('started')
+    }
+
+    const stop = () => {
+      debug('Stopping resync check')
+      if (state.is('stopped')) {
+        return
+      }
+      clearInterval(resyncTimer)
+      state.change('stopped')
+    }
+
+    return { start, stop }
   }
 
   /**
@@ -119,11 +165,9 @@ export const initSync = (
   ) => {
     let deferred: Deferred
     let cursor: ReturnType<typeof collection.find>
-    const state = fsm<State>(stateTransitions, 'stopped', {
+    const state = fsm(stateTransitions, 'stopped', {
       name: 'Initial scan',
-      onStateChange(change) {
-        emit('stateChange', change)
-      },
+      onStateChange: emitStateChange,
     })
 
     /**
@@ -236,6 +280,10 @@ export const initSync = (
           ns,
         } as unknown as ChangeStreamInsertDocument
         await queue.enqueue(changeStreamDoc)
+        // Prevents the occassional cursor exhausted error
+        if (cursor.closed) {
+          break
+        }
       }
       // Flush the queue
       await queue.flush()
@@ -291,11 +339,9 @@ export const initSync = (
   ) => {
     let deferred: Deferred
     let changeStream: ChangeStream
-    const state = fsm<State>(stateTransitions, 'stopped', {
+    const state = fsm(stateTransitions, 'stopped', {
       name: 'Change stream',
-      onStateChange(change) {
-        emit('stateChange', change)
-      },
+      onStateChange: emitStateChange,
     })
     const pipeline = options.pipeline || []
 
@@ -375,14 +421,14 @@ export const initSync = (
         [...omitPipeline, ...pipeline],
         changeStreamOptions
       )
-      const iterator = toIterator(changeStream)
       state.change('started')
       // Start the health check
       if (options.enableHealthCheck) {
         healthCheck.start()
       }
       // Get the change stream as an async iterator
-      for await (let event of iterator) {
+      while (await safelyCheckNext(changeStream)) {
+        let event = await changeStream.next()
         debug('Change stream event %O', event)
         // Get resume token
         const token = event?._id
@@ -459,6 +505,10 @@ export const initSync = (
     const interval = options.interval || ms('1m')
     const shouldRemoveMetadata = options.shouldRemoveMetadata
     const maybeRemoveMetadata = when(shouldRemoveMetadata, removeMetadata)
+    const state = fsm(simpleStateTransistions, 'stopped', {
+      name: 'Schema change',
+      onStateChange: emitStateChange,
+    })
 
     let timer: NodeJS.Timer
     // Check for a cached schema
@@ -493,16 +543,24 @@ export const initSync = (
         previousSchema = currentSchema
       }
     }
-    const start = async () => {
+    const start = () => {
       debug('Starting polling for schema changes')
+      if (state.is('started')) {
+        return
+      }
       // Perform an inital check
-      await checkForSchemaChange()
+      checkForSchemaChange()
       // Check for schema changes every interval
       timer = setInterval(checkForSchemaChange, interval)
+      state.change('started')
     }
     const stop = () => {
       debug('Stopping polling for schema changes')
+      if (state.is('stopped')) {
+        return
+      }
       clearInterval(timer)
+      state.change('stopped')
     }
     return { start, stop }
   }
@@ -542,6 +600,11 @@ export const initSync = (
      * the timer.
      */
     detectSchemaChange,
+    /**
+     * Determine if the collection should be resynced by checking for the existence
+     * of the resync key in Redis.
+     */
+    detectResync,
     /**
      * Redis keys used for the collection.
      */

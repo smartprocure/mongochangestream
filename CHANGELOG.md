@@ -1,3 +1,9 @@
+# 0.33.0
+
+- Fixed cursor exhausted bug with initial scan.
+- Simplified change stream cursor consumption.
+- Resync flag via `detectResync`.
+
 # 0.32.0
 
 - Better handling of state transitions.

@@ -1,4 +1,4 @@
-import { Collection } from 'mongodb'
+import { Collection, ChangeStream } from 'mongodb'
 import _ from 'lodash/fp.js'
 import { Node, walkie } from 'obj-walker'
 import { JSONSchema } from './types'
@@ -51,5 +51,16 @@ export const removeMetadata = (schema: JSONSchema): JSONSchema => {
 export function when<T, R>(condition: any, fn: (x: T) => R) {
   return function (x: T) {
     return condition ? fn(x) : x
+  }
+}
+
+export const safelyCheckNext = async (changeStream: ChangeStream) => {
+  try {
+    if (changeStream.closed) {
+      return false
+    }
+    return await changeStream.hasNext()
+  } catch (e) {
+    return false
   }
 }

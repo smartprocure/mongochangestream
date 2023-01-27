@@ -64,3 +64,6 @@ test-results.json
 dist/
 
 *.un~
+
+run-tests
+run-tests-only
