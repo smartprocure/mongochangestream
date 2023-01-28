@@ -240,7 +240,7 @@ test('Should resync when resync flag is set', async () => {
   }
 
   const initialScan = await sync.runInitialScan(processRecords)
-  const resync = sync.detectResync()
+  const resync = sync.detectResync(250)
   initialScan.start()
   resync.start()
   // Allow for initial scan to start
