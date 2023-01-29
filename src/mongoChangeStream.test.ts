@@ -60,13 +60,19 @@ const populateCollection = (collection: Collection) => {
   return collection.bulkWrite(users)
 }
 
-test('should complete initial scan', async () => {
+const before = async () => {
   const { sync, coll } = await init()
   // Reset state
   await sync.reset()
   await coll.deleteMany({})
-
+  // Populate data
   await populateCollection(coll)
+}
+
+test('should complete initial scan', async () => {
+  const { sync } = await init()
+  await before()
+
   const processed = []
   const processRecords = async (docs: ChangeStreamInsertDocument[]) => {
     await setTimeout(50)
@@ -82,12 +88,9 @@ test('should complete initial scan', async () => {
 })
 
 test('initial scan should resume properly', async () => {
-  const { sync, coll } = await init()
-  // Reset state
-  await sync.reset()
-  await coll.deleteMany({})
-  // Populate data
-  await populateCollection(coll)
+  const { sync } = await init()
+  await before()
+
   const processed = []
   const processRecords = async (docs: ChangeStreamInsertDocument[]) => {
     await setTimeout(50)
@@ -110,11 +113,7 @@ test('initial scan should resume properly', async () => {
 
 test('should process records via change stream', async () => {
   const { sync, coll } = await init()
-  // Reset state
-  await sync.reset()
-  await coll.deleteMany({})
-
-  await populateCollection(coll)
+  await before()
 
   const processed = []
   const processRecord = async (doc: ChangeStreamDocument) => {
@@ -136,11 +135,7 @@ test('should process records via change stream', async () => {
 
 test('change stream should resume properly', async () => {
   const { sync, coll } = await init()
-  // Reset state
-  await sync.reset()
-  await coll.deleteMany({})
-
-  await populateCollection(coll)
+  await before()
 
   const processed = []
   // Change stream
@@ -167,33 +162,6 @@ test('change stream should resume properly', async () => {
   await changeStream.stop()
 })
 
-test('stopping change stream is idempotent', async () => {
-  const { sync, coll } = await init()
-  // Change stream
-  const processRecord = async () => {
-    await setTimeout(5)
-  }
-  const changeStream = await sync.processChangeStream(processRecord)
-  changeStream.start()
-  // Change documents
-  coll.updateMany({}, { $set: { createdAt: new Date('2022-01-03') } })
-  // Stop twice
-  await changeStream.stop()
-  await changeStream.stop()
-})
-
-test('stopping initial scan is idempotent', async () => {
-  const { sync } = await init()
-  const processRecords = async () => {
-    await setTimeout(50)
-  }
-  const initialScan = await sync.runInitialScan(processRecords)
-  initialScan.start()
-  // Stop twice
-  await initialScan.stop()
-  await initialScan.stop()
-})
-
 test('starting change stream is idempotent', async () => {
   const { sync } = await init()
   // Change stream
@@ -207,11 +175,26 @@ test('starting change stream is idempotent', async () => {
   await changeStream.stop()
 })
 
-test('starting initial scan is idempotent', async () => {
+test('stopping change stream is idempotent', async () => {
   const { sync, coll } = await init()
-  // Reset state
-  await sync.reset()
-  await coll.deleteMany({})
+  await before()
+
+  // Change stream
+  const processRecord = async () => {
+    await setTimeout(5)
+  }
+  const changeStream = await sync.processChangeStream(processRecord)
+  changeStream.start()
+  // Change documents
+  await coll.updateMany({}, { $set: { createdAt: new Date('2022-01-03') } })
+  // Stop twice
+  await changeStream.stop()
+  await changeStream.stop()
+})
+
+test('starting initial scan is idempotent', async () => {
+  const { sync } = await init()
+  await before()
 
   const processRecords = async () => {
     await setTimeout(50)
@@ -223,16 +206,27 @@ test('starting initial scan is idempotent', async () => {
   await initialScan.stop()
 })
 
+test('stopping initial scan is idempotent', async () => {
+  const { sync } = await init()
+  await before()
+
+  const processRecords = async () => {
+    await setTimeout(50)
+  }
+  const initialScan = await sync.runInitialScan(processRecords)
+  initialScan.start()
+  await setTimeout(500)
+  // Stop twice
+  await initialScan.stop()
+  await initialScan.stop()
+})
+
 test('Should resync when resync flag is set', async () => {
-  const { sync, coll, redis } = await init()
-  // Reset state
-  await sync.reset()
-  await coll.deleteMany({})
+  const { sync, redis } = await init()
+  await before()
 
   let resyncTriggered = false
   const processed = []
-
-  await populateCollection(coll)
 
   const processRecords = async (docs: ChangeStreamInsertDocument[]) => {
     await setTimeout(50)
@@ -241,14 +235,9 @@ test('Should resync when resync flag is set', async () => {
 
   const initialScan = await sync.runInitialScan(processRecords)
   const resync = sync.detectResync(250)
-  initialScan.start()
-  resync.start()
-  // Allow for initial scan to start
-  await setTimeout(500)
-  // Trigger resync
-  await redis.set(sync.keys.resyncKey, 1)
-
   sync.emitter.on('resync', async () => {
+    // Stop checking for resync
+    resync.stop()
     resyncTriggered = true
     // Stop the initial scan
     await initialScan.stop()
@@ -259,12 +248,20 @@ test('Should resync when resync flag is set', async () => {
     // Start initial scan
     initialScan.start()
   })
+  // Start initial scan
+  initialScan.start()
+  // Start resync detection
+  resync.start()
+  // Allow for initial scan to start
+  await setTimeout(500)
+  // Trigger resync
+  await redis.set(sync.keys.resyncKey, 1)
+
   // Wait for initial scan to complete
   await setTimeout(ms('5s'))
   assert.ok(resyncTriggered)
   assert.equal(processed.length, numDocs)
   await initialScan.stop()
-  resync.stop()
 })
 
 test('Resync start/stop is idempotent', async () => {
@@ -303,5 +300,15 @@ test('Detect schema change', async () => {
   })
   await setTimeout(ms('1s'))
   assert.deepEqual(schema, newSchema)
+  schemaChange.stop()
+})
+
+test('Schema change start/stop is idempotent', async () => {
+  const { sync, db } = await init()
+
+  const schemaChange = await sync.detectSchemaChange(db)
+  schemaChange.start()
+  schemaChange.start()
+  schemaChange.stop()
   schemaChange.stop()
 })

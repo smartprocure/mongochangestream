@@ -54,6 +54,9 @@ export function when<T, R>(condition: any, fn: (x: T) => R) {
   }
 }
 
+/**
+ * Check if the change stream has next without throwing an exception.
+ */
 export const safelyCheckNext = async (changeStream: ChangeStream) => {
   try {
     if (changeStream.closed) {
