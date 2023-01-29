@@ -189,10 +189,7 @@ export const initSync = (
         // Records were not synced within the health check window
         if (!withinHealthCheck(lastSyncedAt) && !state.is('stopped')) {
           debug('Health check failed - initial scan')
-          emit('healthCheckFail', {
-            failureType: 'initialScan',
-            lastSyncedAt,
-          } as HealthCheckFailEvent)
+          emit('healthCheckFail', { failureType: 'initialScan', lastSyncedAt })
         }
       }
       const start = () => {
@@ -388,7 +385,7 @@ export const initSync = (
             failureType: 'changeStream',
             lastRecordCreatedAt,
             lastSyncedAt,
-          } as HealthCheckFailEvent)
+          })
         }
       }
       const start = () => {
@@ -553,10 +550,7 @@ export const initSync = (
         // Persist schema
         await redis.set(keys.schemaKey, JSON.stringify(currentSchema))
         // Emit change
-        emit('schemaChange', {
-          previousSchema,
-          currentSchema,
-        } as SchemaChangeEvent)
+        emit('schemaChange', { previousSchema, currentSchema })
         // Previous schema is now the current schema
         previousSchema = currentSchema
       }
