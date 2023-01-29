@@ -175,7 +175,10 @@ export const initSync = (
      */
     const healthChecker = (healthCheckInterval = ms('1m')) => {
       let timer: NodeJS.Timer
-      let stopped: boolean
+      const state = fsm(simpleStateTransistions, 'stopped', {
+        name: 'Health check - initial scan',
+        onStateChange: emitStateChange,
+      })
 
       const runHealthCheck = async () => {
         debug('Checking health - initial scan')
@@ -184,7 +187,7 @@ export const initSync = (
         const lastSyncedAt = await getLastSyncedAt(keys.lastScanProcessedAtKey)
         debug('Last scan processed at %d', lastSyncedAt)
         // Records were not synced within the health check window
-        if (!withinHealthCheck(lastSyncedAt) && !stopped) {
+        if (!withinHealthCheck(lastSyncedAt) && !state.is('stopped')) {
           debug('Health check failed - initial scan')
           emit('healthCheckFail', {
             failureType: 'initialScan',
@@ -194,13 +197,19 @@ export const initSync = (
       }
       const start = () => {
         debug('Starting health check - initial scan')
-        stopped = false
+        if (state.is('started')) {
+          return
+        }
         timer = setInterval(runHealthCheck, healthCheckInterval)
+        state.change('started')
       }
       const stop = () => {
         debug('Stopping health check - initial scan')
-        stopped = true
+        if (state.is('stopped')) {
+          return
+        }
         clearInterval(timer)
+        state.change('stopped')
       }
       return { start, stop }
     }
@@ -351,7 +360,10 @@ export const initSync = (
      */
     const healthChecker = (healthCheckInterval = ms('1m')) => {
       let timer: NodeJS.Timer
-      let stopped: boolean
+      const state = fsm(simpleStateTransistions, 'stopped', {
+        name: 'Health check - change stream',
+        onStateChange: emitStateChange,
+      })
 
       const runHealthCheck = async () => {
         debug('Checking health - change stream')
@@ -369,7 +381,7 @@ export const initSync = (
         if (
           withinHealthCheck(lastRecordCreatedAt) &&
           !withinHealthCheck(lastSyncedAt) &&
-          !stopped
+          !state.is('stopped')
         ) {
           debug('Health check failed - change stream')
           emit('healthCheckFail', {
@@ -381,13 +393,19 @@ export const initSync = (
       }
       const start = () => {
         debug('Starting health check - change stream')
-        stopped = false
+        if (state.is('started')) {
+          return
+        }
         timer = setInterval(runHealthCheck, healthCheckInterval)
+        state.change('started')
       }
       const stop = () => {
         debug('Stopping health check - change stream')
-        stopped = true
+        if (state.is('stopped')) {
+          return
+        }
         clearInterval(timer)
+        state.change('stopped')
       }
       return { start, stop }
     }
