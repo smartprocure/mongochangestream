@@ -59,6 +59,7 @@ export function when<T, R>(condition: any, fn: (x: T) => R) {
  */
 export const safelyCheckNext = async (cursor: ChangeStream | FindCursor) => {
   try {
+    // Prevents hasNext from hanging when the cursor is already closed
     if (cursor.closed) {
       return false
     }
