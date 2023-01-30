@@ -1,4 +1,4 @@
-import { Collection } from 'mongodb'
+import { Collection, ChangeStream, FindCursor } from 'mongodb'
 import _ from 'lodash/fp.js'
 import { Node, walkie } from 'obj-walker'
 import { JSONSchema } from './types'
@@ -51,5 +51,20 @@ export const removeMetadata = (schema: JSONSchema): JSONSchema => {
 export function when<T, R>(condition: any, fn: (x: T) => R) {
   return function (x: T) {
     return condition ? fn(x) : x
+  }
+}
+
+/**
+ * Check if the cursor has next without throwing an exception.
+ */
+export const safelyCheckNext = async (cursor: ChangeStream | FindCursor) => {
+  try {
+    // Prevents hasNext from hanging when the cursor is already closed
+    if (cursor.closed) {
+      return false
+    }
+    return await cursor.hasNext()
+  } catch (e) {
+    return false
   }
 }

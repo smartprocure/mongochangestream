@@ -6,7 +6,6 @@ import {
   Db,
   ChangeStream,
 } from 'mongodb'
-import toIterator from './changeStreamToIterator.js'
 import {
   Events,
   SyncOptions,
@@ -16,9 +15,8 @@ import {
   ChangeOptions,
   ChangeStreamOptions,
   JSONSchema,
-  HealthCheckFailEvent,
-  SchemaChangeEvent,
   State,
+  SimpleState,
 } from './types.js'
 import _debug from 'debug'
 import type { Redis } from 'ioredis'
@@ -28,6 +26,7 @@ import {
   getCollectionKey,
   omitFieldForUpdate,
   removeMetadata,
+  safelyCheckNext,
   setDefaults,
   when,
 } from './util.js'
@@ -42,7 +41,7 @@ const keyPrefix = 'mongoChangeStream'
 /**
  * Get Redis keys used for the collection.
  */
-const getKeys = (collection: Collection) => {
+export const getKeys = (collection: Collection) => {
   const collectionKey = getCollectionKey(collection)
   const collectionPrefix = `${keyPrefix}:${collectionKey}`
   const scanCompletedKey = `${collectionPrefix}:initialScanCompletedOn`
@@ -51,6 +50,7 @@ const getKeys = (collection: Collection) => {
   const schemaKey = `${collectionPrefix}:schema`
   const lastChangeProcessedAtKey = `${collectionPrefix}:lastChangeProcessedAt`
   const lastScanProcessedAtKey = `${collectionPrefix}:lastScanProcessedAt`
+  const resyncKey = `${collectionPrefix}:resync`
   return {
     scanCompletedKey,
     lastScanIdKey,
@@ -58,6 +58,7 @@ const getKeys = (collection: Collection) => {
     schemaKey,
     lastChangeProcessedAtKey,
     lastScanProcessedAtKey,
+    resyncKey,
   }
 }
 
@@ -74,17 +75,60 @@ const stateTransitions: StateTransitions<State> = {
   stopping: ['stopped'],
 }
 
+const simpleStateTransistions: StateTransitions<SimpleState> = {
+  started: ['stopped'],
+  stopped: ['started'],
+}
+
 export const initSync = (
   redis: Redis,
   collection: Collection,
   options: SyncOptions = {}
 ) => {
   const keys = getKeys(collection)
-  const omit = options.omit
+  const { omit } = options
   const omitPipeline = omit ? generatePipelineFromOmit(omit) : []
   const emitter = new EventEmitter()
   const emit = (event: Events, data: object) => {
     emitter.emit(event, { type: event, ...data })
+  }
+  const emitStateChange = (change: object) => emit('stateChange', change)
+
+  // Detect if resync flag is set
+  const detectResync = (resyncCheckInterval = ms('1m')) => {
+    let resyncTimer: NodeJS.Timer
+    const state = fsm(simpleStateTransistions, 'stopped', {
+      name: 'Resync',
+      onStateChange: emitStateChange,
+    })
+
+    const shouldResync = () => redis.exists(keys.resyncKey)
+
+    const start = () => {
+      debug('Starting resync check')
+      if (state.is('started')) {
+        return
+      }
+      // Check periodically if the collection should be resynced
+      resyncTimer = setInterval(async () => {
+        if (await shouldResync()) {
+          debug('Resync triggered')
+          emit('resync', {})
+        }
+      }, resyncCheckInterval)
+      state.change('started')
+    }
+
+    const stop = () => {
+      debug('Stopping resync check')
+      if (state.is('stopped')) {
+        return
+      }
+      clearInterval(resyncTimer)
+      state.change('stopped')
+    }
+
+    return { start, stop }
   }
 
   /**
@@ -98,18 +142,18 @@ export const initSync = (
     })
 
   /**
-   * Get the timestamp of the last record created using _id
+   * Get the timestamp of the last record updated
    */
-  const getLastRecordCreatedAt = (): Promise<number | undefined> =>
+  const getLastRecordUpdatedAt = (field: string): Promise<number | undefined> =>
     collection
       .find({})
-      .sort({ _id: -1 })
-      .project({ _id: 1 })
+      .sort({ [field]: -1 })
+      .project({ [field]: 1 })
       .limit(1)
       .toArray()
       .then((x) => {
         if (x.length) {
-          return x[0]?._id?.getTimestamp()?.getTime()
+          return x[0][field]?.getTime()
         }
       })
 
@@ -119,49 +163,54 @@ export const initSync = (
   ) => {
     let deferred: Deferred
     let cursor: ReturnType<typeof collection.find>
-    const state = fsm<State>(stateTransitions, 'stopped', {
+    const state = fsm(stateTransitions, 'stopped', {
       name: 'Initial scan',
-      onStateChange(change) {
-        emit('stateChange', change)
-      },
+      onStateChange: emitStateChange,
     })
 
     /**
      * Periodically check that records are being processed.
      */
-    const healthChecker = (healthCheckInterval = ms('1m')) => {
+    const healthChecker = () => {
+      const { interval = ms('1m') } = options.healthCheck || {}
       let timer: NodeJS.Timer
-      let stopped: boolean
+      const state = fsm(simpleStateTransistions, 'stopped', {
+        name: 'Initial scan health check',
+        onStateChange: emitStateChange,
+      })
 
       const runHealthCheck = async () => {
         debug('Checking health - initial scan')
-        const lastHealthCheck = new Date().getTime() - healthCheckInterval
+        const lastHealthCheck = new Date().getTime() - interval
         const withinHealthCheck = (x?: number) => x && x > lastHealthCheck
         const lastSyncedAt = await getLastSyncedAt(keys.lastScanProcessedAtKey)
         debug('Last scan processed at %d', lastSyncedAt)
         // Records were not synced within the health check window
-        if (!withinHealthCheck(lastSyncedAt) && !stopped) {
+        if (!withinHealthCheck(lastSyncedAt) && !state.is('stopped')) {
           debug('Health check failed - initial scan')
-          emit('healthCheckFail', {
-            failureType: 'initialScan',
-            lastSyncedAt,
-          } as HealthCheckFailEvent)
+          emit('healthCheckFail', { failureType: 'initialScan', lastSyncedAt })
         }
       }
       const start = () => {
         debug('Starting health check - initial scan')
-        stopped = false
-        timer = setInterval(runHealthCheck, healthCheckInterval)
+        if (state.is('started')) {
+          return
+        }
+        timer = setInterval(runHealthCheck, interval)
+        state.change('started')
       }
       const stop = () => {
         debug('Stopping health check - initial scan')
-        stopped = true
+        if (state.is('stopped')) {
+          return
+        }
         clearInterval(timer)
+        state.change('stopped')
       }
       return { start, stop }
     }
 
-    const healthCheck = healthChecker(options.healthCheckInterval)
+    const healthCheck = healthChecker()
 
     const start = async () => {
       debug('Starting initial scan')
@@ -190,7 +239,7 @@ export const initSync = (
         return
       }
       // Start the health check
-      if (options.enableHealthCheck) {
+      if (options.healthCheck?.enabled) {
         healthCheck.start()
       }
 
@@ -228,7 +277,8 @@ export const initSync = (
       state.change('started')
       const ns = { db: collection.dbName, coll: collection.collectionName }
       // Process documents
-      for await (const doc of cursor) {
+      while (await safelyCheckNext(cursor)) {
+        const doc = await cursor.next()
         debug('Initial scan doc %O', doc)
         const changeStreamDoc = {
           fullDocument: doc,
@@ -291,11 +341,9 @@ export const initSync = (
   ) => {
     let deferred: Deferred
     let changeStream: ChangeStream
-    const state = fsm<State>(stateTransitions, 'stopped', {
+    const state = fsm(stateTransitions, 'stopped', {
       name: 'Change stream',
-      onStateChange(change) {
-        emit('stateChange', change)
-      },
+      onStateChange: emitStateChange,
     })
     const pipeline = options.pipeline || []
 
@@ -303,50 +351,62 @@ export const initSync = (
      * Periodically check that change stream events are being processed.
      * Only applies to records inserted into the collection.
      */
-    const healthChecker = (healthCheckInterval = ms('1m')) => {
+    const healthChecker = () => {
+      const {
+        field,
+        interval = ms('1m'),
+        maxSyncDelay = ms('5s'),
+      } = options.healthCheck || {}
       let timer: NodeJS.Timer
-      let stopped: boolean
+      const state = fsm(simpleStateTransistions, 'stopped', {
+        name: 'Change stream health check',
+        onStateChange: emitStateChange,
+      })
 
       const runHealthCheck = async () => {
         debug('Checking health - change stream')
-        const lastHealthCheck = new Date().getTime() - healthCheckInterval
-        const [lastSyncedAt, lastRecordCreatedAt] = await Promise.all([
+        const [lastSyncedAt, lastRecordUpdatedAt] = await Promise.all([
           getLastSyncedAt(keys.lastChangeProcessedAtKey),
-          getLastRecordCreatedAt(),
+          // Typescript hack
+          getLastRecordUpdatedAt(field as string),
         ])
         debug('Last change processed at %d', lastSyncedAt)
-        debug('Last record created at %d', lastRecordCreatedAt)
-        const withinHealthCheck = (x?: number) => x && x > lastHealthCheck
-        // A record was created within the health check window but not synced.
-        // NOTE: It is possible for a record to be created a the end of the window
-        // but not synced before the next health check leading to a false failure.
+        debug('Last record created at %d', lastRecordUpdatedAt)
+        // A record was updated but not synced within 5 seconds of being updated
         if (
-          withinHealthCheck(lastRecordCreatedAt) &&
-          !withinHealthCheck(lastSyncedAt) &&
-          !stopped
+          !state.is('stopped') &&
+          lastRecordUpdatedAt &&
+          lastSyncedAt &&
+          lastRecordUpdatedAt - lastSyncedAt > maxSyncDelay
         ) {
           debug('Health check failed - change stream')
           emit('healthCheckFail', {
             failureType: 'changeStream',
-            lastRecordCreatedAt,
+            lastRecordUpdatedAt,
             lastSyncedAt,
-          } as HealthCheckFailEvent)
+          })
         }
       }
       const start = () => {
         debug('Starting health check - change stream')
-        stopped = false
-        timer = setInterval(runHealthCheck, healthCheckInterval)
+        if (state.is('started')) {
+          return
+        }
+        timer = setInterval(runHealthCheck, interval)
+        state.change('started')
       }
       const stop = () => {
         debug('Stopping health check - change stream')
-        stopped = true
+        if (state.is('stopped')) {
+          return
+        }
         clearInterval(timer)
+        state.change('stopped')
       }
       return { start, stop }
     }
 
-    const healthCheck = healthChecker(options.healthCheckInterval)
+    const healthCheck = healthChecker()
 
     const start = async () => {
       debug('Starting change stream')
@@ -375,14 +435,14 @@ export const initSync = (
         [...omitPipeline, ...pipeline],
         changeStreamOptions
       )
-      const iterator = toIterator(changeStream)
       state.change('started')
       // Start the health check
-      if (options.enableHealthCheck) {
+      if (options.healthCheck?.enabled) {
         healthCheck.start()
       }
       // Get the change stream as an async iterator
-      for await (let event of iterator) {
+      while (await safelyCheckNext(changeStream)) {
+        let event = await changeStream.next()
         debug('Change stream event %O', event)
         // Get resume token
         const token = event?._id
@@ -459,6 +519,10 @@ export const initSync = (
     const interval = options.interval || ms('1m')
     const shouldRemoveMetadata = options.shouldRemoveMetadata
     const maybeRemoveMetadata = when(shouldRemoveMetadata, removeMetadata)
+    const state = fsm(simpleStateTransistions, 'stopped', {
+      name: 'Schema change',
+      onStateChange: emitStateChange,
+    })
 
     let timer: NodeJS.Timer
     // Check for a cached schema
@@ -485,24 +549,29 @@ export const initSync = (
         // Persist schema
         await redis.set(keys.schemaKey, JSON.stringify(currentSchema))
         // Emit change
-        emit('schemaChange', {
-          previousSchema,
-          currentSchema,
-        } as SchemaChangeEvent)
+        emit('schemaChange', { previousSchema, currentSchema })
         // Previous schema is now the current schema
         previousSchema = currentSchema
       }
     }
-    const start = async () => {
+    const start = () => {
       debug('Starting polling for schema changes')
+      if (state.is('started')) {
+        return
+      }
       // Perform an inital check
-      await checkForSchemaChange()
+      checkForSchemaChange()
       // Check for schema changes every interval
       timer = setInterval(checkForSchemaChange, interval)
+      state.change('started')
     }
     const stop = () => {
       debug('Stopping polling for schema changes')
+      if (state.is('stopped')) {
+        return
+      }
       clearInterval(timer)
+      state.change('stopped')
     }
     return { start, stop }
   }
@@ -542,6 +611,11 @@ export const initSync = (
      * the timer.
      */
     detectSchemaChange,
+    /**
+     * Determine if the collection should be resynced by checking for the existence
+     * of the resync key in Redis.
+     */
+    detectResync,
     /**
      * Redis keys used for the collection.
      */

@@ -4,11 +4,15 @@ import {
   Document,
 } from 'mongodb'
 
+export type JSONSchema = Record<string, any>
+
 export type ProcessRecord = (doc: ChangeStreamDocument) => void | Promise<void>
 
 export type ProcessRecords = (
   doc: ChangeStreamInsertDocument[]
 ) => void | Promise<void>
+
+// Options
 
 export interface SyncOptions {
   /** Field paths to omit. */
@@ -16,10 +20,11 @@ export interface SyncOptions {
 }
 
 export interface ScanOptions<T = any> {
-  /** Set to true to run a health check in the background. */
-  enableHealthCheck?: boolean
-  /** How often to run the health check. */
-  healthCheckInterval?: number
+  healthCheck?: {
+    enabled: boolean
+    /** How often to run the health check. */
+    interval?: number
+  }
   sortField?: {
     field: string
     serialize: (x: T) => string
@@ -28,10 +33,15 @@ export interface ScanOptions<T = any> {
 }
 
 export interface ChangeStreamOptions {
-  /** Set to true to run a health check in the background. */
-  enableHealthCheck?: boolean
-  /** How often to run the health check. */
-  healthCheckInterval?: number
+  healthCheck?: {
+    enabled: boolean
+    /** The date field that contains the time the record was last updated */
+    field: string
+    /** How often to run the health check. */
+    interval?: number
+    /** The max allowed time for a modified record to be synced */
+    maxSyncDelay?: number
+  }
   pipeline?: Document[]
 }
 
@@ -42,26 +52,47 @@ export interface ChangeOptions {
   shouldRemoveMetadata?: boolean
 }
 
+// Events
+
+export type Events =
+  | 'healthCheckFail'
+  | 'resync'
+  | 'schemaChange'
+  | 'stateChange'
+
 interface InitialScanFailEvent {
+  type: 'healthCheckFail'
   failureType: 'initialScan'
   lastSyncedAt: number
 }
 
 interface ChangeStreamFailEvent {
+  type: 'healthCheckFail'
   failureType: 'changeStream'
-  lastRecordCreatedAt: number
+  lastRecordUpdatedAt: number
   lastSyncedAt: number
 }
 
 export type HealthCheckFailEvent = InitialScanFailEvent | ChangeStreamFailEvent
 
+export interface ResyncEvent {
+  type: 'resync'
+}
+
 export interface SchemaChangeEvent {
+  type: 'schemaChange'
   previousSchema?: JSONSchema
   currentSchema: JSONSchema
 }
 
-export type JSONSchema = Record<string, any>
+export interface StateChangeEvent {
+  type: 'stateChange'
+  from: string
+  to: string
+}
 
-export type Events = 'schemaChange' | 'healthCheckFail' | 'stateChange'
+// State
 
 export type State = 'starting' | 'started' | 'stopping' | 'stopped'
+
+export type SimpleState = 'started' | 'stopped'

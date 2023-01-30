@@ -6,6 +6,13 @@ import { test } from 'node:test'
 import assert from 'node:assert'
 import { initSync } from './mongoChangeStream.js'
 import {
+  JSONSchema,
+  SyncOptions,
+  SchemaChangeEvent,
+  ScanOptions,
+  ChangeStreamOptions,
+} from './types.js'
+import {
   ChangeStreamDocument,
   ChangeStreamInsertDocument,
   MongoClient,
@@ -15,16 +22,17 @@ import Redis from 'ioredis'
 import { faker } from '@faker-js/faker'
 import ms from 'ms'
 import { setTimeout } from 'node:timers/promises'
+import { QueueOptions } from 'prom-utils'
 
-const init = _.memoize(async () => {
+const init = _.memoize(async (options?: SyncOptions) => {
   const redis = new Redis({ keyPrefix: 'testing:' })
   const client = await MongoClient.connect(process.env.MONGO_CONN as string)
   const db = client.db()
   const coll = db.collection('testing')
-  const sync = initSync(redis, coll)
+  const sync = initSync(redis, coll, options)
   sync.emitter.on('stateChange', console.log)
 
-  return { sync, coll }
+  return { sync, db, coll, redis }
 })
 
 const genUser = () => ({
@@ -34,6 +42,20 @@ const genUser = () => ({
   zipCode: faker.address.zipCode(),
   createdAt: faker.date.past(),
 })
+
+const schema: JSONSchema = {
+  bsonType: 'object',
+  additionalProperties: false,
+  required: ['name'],
+  properties: {
+    _id: { bsonType: 'objectId' },
+    name: { bsonType: 'string' },
+    city: { bsonType: 'string' },
+    state: { bsonType: 'string' },
+    zipCode: { bsonType: 'string' },
+    createdAt: { bsonType: 'date' },
+  },
+}
 
 const numDocs = 500
 
@@ -45,13 +67,19 @@ const populateCollection = (collection: Collection) => {
   return collection.bulkWrite(users)
 }
 
-test('should complete initial scan', async () => {
+const before = async () => {
   const { sync, coll } = await init()
   // Reset state
   await sync.reset()
   await coll.deleteMany({})
-
+  // Populate data
   await populateCollection(coll)
+}
+
+test('should complete initial scan', async () => {
+  const { sync } = await init()
+  await before()
+
   const processed = []
   const processRecords = async (docs: ChangeStreamInsertDocument[]) => {
     await setTimeout(50)
@@ -67,12 +95,9 @@ test('should complete initial scan', async () => {
 })
 
 test('initial scan should resume properly', async () => {
-  const { sync, coll } = await init()
-  // Reset state
-  await sync.reset()
-  await coll.deleteMany({})
-  // Populate data
-  await populateCollection(coll)
+  const { sync } = await init()
+  await before()
+
   const processed = []
   const processRecords = async (docs: ChangeStreamInsertDocument[]) => {
     await setTimeout(50)
@@ -95,6 +120,8 @@ test('initial scan should resume properly', async () => {
 
 test('should process records via change stream', async () => {
   const { sync, coll } = await init()
+  await before()
+
   const processed = []
   const processRecord = async (doc: ChangeStreamDocument) => {
     await setTimeout(5)
@@ -115,6 +142,8 @@ test('should process records via change stream', async () => {
 
 test('change stream should resume properly', async () => {
   const { sync, coll } = await init()
+  await before()
+
   const processed = []
   // Change stream
   const processRecord = async (doc: ChangeStreamDocument) => {
@@ -133,37 +162,11 @@ test('change stream should resume properly', async () => {
   await changeStream.stop()
   // Resume change stream
   changeStream.start()
+  // Wait for all documents to be processed
   await setTimeout(ms('10s'))
   // All change stream docs were processed
   assert.equal(processed.length, numDocs)
   await changeStream.stop()
-})
-
-test('stopping change stream is idempotent', async () => {
-  const { sync, coll } = await init()
-  // Change stream
-  const processRecord = async () => {
-    await setTimeout(5)
-  }
-  const changeStream = await sync.processChangeStream(processRecord)
-  changeStream.start()
-  // Change documents
-  coll.updateMany({}, { $set: { createdAt: new Date('2022-01-03') } })
-  // Stop twice
-  await changeStream.stop()
-  await changeStream.stop()
-})
-
-test('stopping initial scan is idempotent', async () => {
-  const { sync } = await init()
-  const processRecords = async () => {
-    await setTimeout(50)
-  }
-  const initialScan = await sync.runInitialScan(processRecords)
-  initialScan.start()
-  // Stop twice
-  await initialScan.stop()
-  await initialScan.stop()
 })
 
 test('starting change stream is idempotent', async () => {
@@ -179,11 +182,26 @@ test('starting change stream is idempotent', async () => {
   await changeStream.stop()
 })
 
-test('starting initial scan is idempotent', async () => {
+test('stopping change stream is idempotent', async () => {
   const { sync, coll } = await init()
-  // Reset state
-  await sync.reset()
-  await coll.deleteMany({})
+  await before()
+
+  // Change stream
+  const processRecord = async () => {
+    await setTimeout(5)
+  }
+  const changeStream = await sync.processChangeStream(processRecord)
+  changeStream.start()
+  // Change documents
+  await coll.updateMany({}, { $set: { createdAt: new Date('2022-01-03') } })
+  // Stop twice
+  await changeStream.stop()
+  await changeStream.stop()
+})
+
+test('starting initial scan is idempotent', async () => {
+  const { sync } = await init()
+  await before()
 
   const processRecords = async () => {
     await setTimeout(50)
@@ -193,4 +211,172 @@ test('starting initial scan is idempotent', async () => {
   initialScan.start()
   initialScan.start()
   await initialScan.stop()
+})
+
+test('stopping initial scan is idempotent', async () => {
+  const { sync } = await init()
+  await before()
+
+  const processRecords = async () => {
+    await setTimeout(50)
+  }
+  const initialScan = await sync.runInitialScan(processRecords)
+  initialScan.start()
+  await setTimeout(500)
+  // Stop twice
+  await initialScan.stop()
+  await initialScan.stop()
+})
+
+test('Should resync when resync flag is set', async () => {
+  const { sync, redis } = await init()
+  await before()
+
+  let resyncTriggered = false
+  const processed = []
+
+  const processRecords = async (docs: ChangeStreamInsertDocument[]) => {
+    await setTimeout(50)
+    processed.push(...docs)
+  }
+
+  const initialScan = await sync.runInitialScan(processRecords)
+  const resync = sync.detectResync(250)
+  sync.emitter.on('resync', async () => {
+    // Stop checking for resync
+    resync.stop()
+    resyncTriggered = true
+    // Stop the initial scan
+    await initialScan.stop()
+    // Reset keys
+    await sync.reset()
+    // Reset processed
+    processed.length = 0
+    // Start initial scan
+    initialScan.start()
+  })
+  // Start initial scan
+  initialScan.start()
+  // Start resync detection
+  resync.start()
+  // Allow for initial scan to start
+  await setTimeout(500)
+  // Trigger resync
+  await redis.set(sync.keys.resyncKey, 1)
+
+  // Wait for initial scan to complete
+  await setTimeout(ms('5s'))
+  assert.ok(resyncTriggered)
+  assert.equal(processed.length, numDocs)
+  await initialScan.stop()
+})
+
+test('Resync start/stop is idempotent', async () => {
+  const { sync } = await init()
+
+  const resync = sync.detectResync()
+  resync.start()
+  resync.start()
+  resync.stop()
+  resync.stop()
+})
+
+test('Detect schema change', async () => {
+  const { db, coll, sync } = await init()
+  // Set schema
+  await db.command({
+    collMod: coll.collectionName,
+    validator: { $jsonSchema: schema },
+  })
+  // Look for a new schema every 250 ms
+  const schemaChange = await sync.detectSchemaChange(db, {
+    shouldRemoveMetadata: true,
+    interval: 250,
+  })
+  let newSchema: object = {}
+  sync.emitter.on('schemaChange', ({ currentSchema }: SchemaChangeEvent) => {
+    newSchema = currentSchema
+  })
+  // Start detecting schema changes
+  schemaChange.start()
+  // Modify the schema
+  schema.properties.email = { bsonType: 'string' }
+  await db.command({
+    collMod: coll.collectionName,
+    validator: { $jsonSchema: schema },
+  })
+  await setTimeout(ms('1s'))
+  assert.deepEqual(schema, newSchema)
+  schemaChange.stop()
+})
+
+test('Schema change start/stop is idempotent', async () => {
+  const { sync, db } = await init()
+
+  const schemaChange = await sync.detectSchemaChange(db)
+  schemaChange.start()
+  schemaChange.start()
+  schemaChange.stop()
+  schemaChange.stop()
+})
+
+test('should fail health check - initial scan', async () => {
+  const { sync } = await init()
+  await before()
+
+  let healthCheckFailed = false
+  const processed = []
+  let counter = 0
+  const processRecords = async (docs: ChangeStreamInsertDocument[]) => {
+    await setTimeout(counter++ === 1 ? 1000 : 100)
+    processed.push(...docs)
+  }
+  const scanOptions: QueueOptions & ScanOptions = {
+    batchSize: 100,
+    healthCheck: { enabled: true, interval: 500 },
+  }
+  const initialScan = await sync.runInitialScan(processRecords, scanOptions)
+  sync.emitter.on('healthCheckFail', () => {
+    healthCheckFailed = true
+    initialScan.stop()
+  })
+  // Wait for initial scan to complete
+  await initialScan.start()
+  assert.ok(healthCheckFailed)
+  assert.notEqual(processed.length, numDocs)
+  // Stop
+  await initialScan.stop()
+})
+
+test('should fail health check - change stream', async () => {
+  const { sync, coll } = await init()
+  await before()
+
+  let healthCheckFailed = false
+  const processed = []
+  const processRecord = async (doc: ChangeStreamDocument) => {
+    await setTimeout(5)
+    processed.push(doc)
+  }
+  const options: ChangeStreamOptions = {
+    healthCheck: { enabled: true, field: 'createdAt', interval: ms('1s') },
+  }
+  const changeStream = await sync.processChangeStream(processRecord, options)
+  sync.emitter.on('healthCheckFail', () => {
+    healthCheckFailed = true
+    changeStream.stop()
+  })
+  // Start
+  changeStream.start()
+  await setTimeout(ms('1s'))
+  // Update records
+  await coll.updateOne({}, { $set: { name: 'Tom' } })
+  // Simulate failure
+  await coll.updateOne({}, { $set: { createdAt: new Date('2050-01-01') } })
+  // Wait for health checker to pick up failure
+  await setTimeout(ms('1s'))
+  assert.ok(healthCheckFailed)
+  assert.notEqual(processed.length, numDocs)
+  // Stop
+  await changeStream.stop()
 })
