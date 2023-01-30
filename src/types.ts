@@ -4,11 +4,15 @@ import {
   Document,
 } from 'mongodb'
 
+export type JSONSchema = Record<string, any>
+
 export type ProcessRecord = (doc: ChangeStreamDocument) => void | Promise<void>
 
 export type ProcessRecords = (
   doc: ChangeStreamInsertDocument[]
 ) => void | Promise<void>
+
+// Options
 
 export interface SyncOptions {
   /** Field paths to omit. */
@@ -42,6 +46,14 @@ export interface ChangeOptions {
   shouldRemoveMetadata?: boolean
 }
 
+// Events
+
+export type Events =
+  | 'healthCheckFail'
+  | 'resync'
+  | 'schemaChange'
+  | 'stateChange'
+
 interface InitialScanFailEvent {
   type: 'healthCheckFail'
   failureType: 'initialScan'
@@ -57,6 +69,10 @@ interface ChangeStreamFailEvent {
 
 export type HealthCheckFailEvent = InitialScanFailEvent | ChangeStreamFailEvent
 
+export interface ResyncEvent {
+  type: 'resync'
+}
+
 export interface SchemaChangeEvent {
   type: 'schemaChange'
   previousSchema?: JSONSchema
@@ -69,13 +85,8 @@ export interface StateChangeEvent {
   to: string
 }
 
-export type JSONSchema = Record<string, any>
-
-export type Events =
-  | 'schemaChange'
-  | 'healthCheckFail'
-  | 'stateChange'
-  | 'resync'
+// State
 
 export type State = 'starting' | 'started' | 'stopping' | 'stopped'
+
 export type SimpleState = 'started' | 'stopped'

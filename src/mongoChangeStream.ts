@@ -15,8 +15,6 @@ import {
   ChangeOptions,
   ChangeStreamOptions,
   JSONSchema,
-  HealthCheckFailEvent,
-  SchemaChangeEvent,
   State,
   SimpleState,
 } from './types.js'
