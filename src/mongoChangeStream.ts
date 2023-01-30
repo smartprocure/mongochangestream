@@ -277,7 +277,8 @@ export const initSync = (
       state.change('started')
       const ns = { db: collection.dbName, coll: collection.collectionName }
       // Process documents
-      for await (const doc of cursor) {
+      while (await safelyCheckNext(cursor)) {
+        const doc = await cursor.next()
         debug('Initial scan doc %O', doc)
         const changeStreamDoc = {
           fullDocument: doc,
@@ -285,10 +286,6 @@ export const initSync = (
           ns,
         } as unknown as ChangeStreamInsertDocument
         await queue.enqueue(changeStreamDoc)
-        // Prevents the occassional cursor exhausted error
-        if (cursor.closed) {
-          break
-        }
       }
       // Flush the queue
       await queue.flush()

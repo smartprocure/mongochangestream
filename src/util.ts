@@ -1,4 +1,4 @@
-import { Collection, ChangeStream } from 'mongodb'
+import { Collection, ChangeStream, FindCursor } from 'mongodb'
 import _ from 'lodash/fp.js'
 import { Node, walkie } from 'obj-walker'
 import { JSONSchema } from './types'
@@ -55,14 +55,14 @@ export function when<T, R>(condition: any, fn: (x: T) => R) {
 }
 
 /**
- * Check if the change stream has next without throwing an exception.
+ * Check if the cursor has next without throwing an exception.
  */
-export const safelyCheckNext = async (changeStream: ChangeStream) => {
+export const safelyCheckNext = async (cursor: ChangeStream | FindCursor) => {
   try {
-    if (changeStream.closed) {
+    if (cursor.closed) {
       return false
     }
-    return await changeStream.hasNext()
+    return await cursor.hasNext()
   } catch (e) {
     return false
   }
