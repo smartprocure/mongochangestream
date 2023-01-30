@@ -92,9 +92,21 @@ const detectSchemaChange = async (db: Db, options: ChangeOptions = {})
 ## Maintaining Health
 
 Sometimes things stop working and a restart seems to fix the issue. In order
-to automate this process you can pass `maintainHealth: true` in the options
+to automate this process you can pass `{healthCheck: {enabled: true}}` in the options
 for `runInitialScan` and `processChangeStream`. This will run a health check
-every `healthCheckInterval` (defaults to 1m) and call `restart` if necessary.
+every `{healthCheck: {interval}}` (defaults to 1m). You can restart syncing
+by checking for the `healthCheckFail` event.
+
+## Companion Libraries
+
+Sync MongoDB to MongoDB
+[mongo2mongo](https://www.npmjs.com/package/mongo2mongo)
+
+Sync MongoDB to CrateDB
+[mongo2crate](https://www.npmjs.com/package/mongo2crate)
+
+Sync MongoDB to Elasticsearch
+[mongo2elastic](https://www.npmjs.com/package/mongo2elastic)
 
 ## Change Stream Strategies
 

@@ -20,10 +20,11 @@ export interface SyncOptions {
 }
 
 export interface ScanOptions<T = any> {
-  /** Set to true to run a health check in the background. */
-  enableHealthCheck?: boolean
-  /** How often to run the health check. */
-  healthCheckInterval?: number
+  healthCheck?: {
+    enabled: boolean
+    /** How often to run the health check. */
+    interval?: number
+  }
   sortField?: {
     field: string
     serialize: (x: T) => string
@@ -32,10 +33,15 @@ export interface ScanOptions<T = any> {
 }
 
 export interface ChangeStreamOptions {
-  /** Set to true to run a health check in the background. */
-  enableHealthCheck?: boolean
-  /** How often to run the health check. */
-  healthCheckInterval?: number
+  healthCheck?: {
+    enabled: boolean
+    /** The date field that contains the time the record was last updated */
+    field: string
+    /** How often to run the health check. */
+    interval?: number
+    /** The max allowed time for a modified record to be synced */
+    maxSyncDelay?: number
+  }
   pipeline?: Document[]
 }
 
@@ -63,7 +69,7 @@ interface InitialScanFailEvent {
 interface ChangeStreamFailEvent {
   type: 'healthCheckFail'
   failureType: 'changeStream'
-  lastRecordCreatedAt: number
+  lastRecordUpdatedAt: number
   lastSyncedAt: number
 }
 

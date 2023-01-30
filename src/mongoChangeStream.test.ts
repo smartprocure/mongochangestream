@@ -5,7 +5,13 @@ import _ from 'lodash/fp'
 import { test } from 'node:test'
 import assert from 'node:assert'
 import { initSync } from './mongoChangeStream.js'
-import { JSONSchema, SyncOptions } from './types.js'
+import {
+  JSONSchema,
+  SyncOptions,
+  SchemaChangeEvent,
+  ScanOptions,
+  ChangeStreamOptions,
+} from './types.js'
 import {
   ChangeStreamDocument,
   ChangeStreamInsertDocument,
@@ -16,6 +22,7 @@ import Redis from 'ioredis'
 import { faker } from '@faker-js/faker'
 import ms from 'ms'
 import { setTimeout } from 'node:timers/promises'
+import { QueueOptions } from 'prom-utils'
 
 const init = _.memoize(async (options?: SyncOptions) => {
   const redis = new Redis({ keyPrefix: 'testing:' })
@@ -287,7 +294,7 @@ test('Detect schema change', async () => {
     interval: 250,
   })
   let newSchema: object = {}
-  sync.emitter.on('schemaChange', ({ currentSchema }) => {
+  sync.emitter.on('schemaChange', ({ currentSchema }: SchemaChangeEvent) => {
     newSchema = currentSchema
   })
   // Start detecting schema changes
@@ -311,4 +318,65 @@ test('Schema change start/stop is idempotent', async () => {
   schemaChange.start()
   schemaChange.stop()
   schemaChange.stop()
+})
+
+test('should fail health check - initial scan', async () => {
+  const { sync } = await init()
+  await before()
+
+  let healthCheckFailed = false
+  const processed = []
+  let counter = 0
+  const processRecords = async (docs: ChangeStreamInsertDocument[]) => {
+    await setTimeout(counter++ === 1 ? 1000 : 100)
+    processed.push(...docs)
+  }
+  const scanOptions: QueueOptions & ScanOptions = {
+    batchSize: 100,
+    healthCheck: { enabled: true, interval: 500 },
+  }
+  const initialScan = await sync.runInitialScan(processRecords, scanOptions)
+  sync.emitter.on('healthCheckFail', () => {
+    healthCheckFailed = true
+    initialScan.stop()
+  })
+  // Wait for initial scan to complete
+  await initialScan.start()
+  assert.ok(healthCheckFailed)
+  assert.notEqual(processed.length, numDocs)
+  // Stop
+  await initialScan.stop()
+})
+
+test('should fail health check - change stream', async () => {
+  const { sync, coll } = await init()
+  await before()
+
+  let healthCheckFailed = false
+  const processed = []
+  const processRecord = async (doc: ChangeStreamDocument) => {
+    await setTimeout(5)
+    processed.push(doc)
+  }
+  const options: ChangeStreamOptions = {
+    healthCheck: { enabled: true, field: 'createdAt', interval: ms('1s') },
+  }
+  const changeStream = await sync.processChangeStream(processRecord, options)
+  sync.emitter.on('healthCheckFail', () => {
+    healthCheckFailed = true
+    changeStream.stop()
+  })
+  // Start
+  changeStream.start()
+  await setTimeout(ms('1s'))
+  // Update records
+  await coll.updateOne({}, { $set: { name: 'Tom' } })
+  // Simulate failure
+  await coll.updateOne({}, { $set: { createdAt: new Date('2050-01-01') } })
+  // Wait for health checker to pick up failure
+  await setTimeout(ms('1s'))
+  assert.ok(healthCheckFailed)
+  assert.notEqual(processed.length, numDocs)
+  // Stop
+  await changeStream.stop()
 })

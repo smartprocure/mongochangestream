@@ -3,6 +3,8 @@
 - Fixed cursor exhausted bug with initial scan.
 - Simplified change stream cursor consumption.
 - Resync flag via `detectResync`.
+- Changed health check options for both initial scan and change stream.
+- Change stream health checker requires a date field to determine if syncing has stopped.
 
 # 0.32.0
 

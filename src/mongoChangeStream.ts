@@ -142,18 +142,18 @@ export const initSync = (
     })
 
   /**
-   * Get the timestamp of the last record created using _id
+   * Get the timestamp of the last record updated
    */
-  const getLastRecordCreatedAt = (): Promise<number | undefined> =>
+  const getLastRecordUpdatedAt = (field: string): Promise<number | undefined> =>
     collection
       .find({})
-      .sort({ _id: -1 })
-      .project({ _id: 1 })
+      .sort({ [field]: -1 })
+      .project({ [field]: 1 })
       .limit(1)
       .toArray()
       .then((x) => {
         if (x.length) {
-          return x[0]?._id?.getTimestamp()?.getTime()
+          return x[0][field]?.getTime()
         }
       })
 
@@ -171,16 +171,17 @@ export const initSync = (
     /**
      * Periodically check that records are being processed.
      */
-    const healthChecker = (healthCheckInterval = ms('1m')) => {
+    const healthChecker = () => {
+      const { interval = ms('1m') } = options.healthCheck || {}
       let timer: NodeJS.Timer
       const state = fsm(simpleStateTransistions, 'stopped', {
-        name: 'Health check - initial scan',
+        name: 'Initial scan health check',
         onStateChange: emitStateChange,
       })
 
       const runHealthCheck = async () => {
         debug('Checking health - initial scan')
-        const lastHealthCheck = new Date().getTime() - healthCheckInterval
+        const lastHealthCheck = new Date().getTime() - interval
         const withinHealthCheck = (x?: number) => x && x > lastHealthCheck
         const lastSyncedAt = await getLastSyncedAt(keys.lastScanProcessedAtKey)
         debug('Last scan processed at %d', lastSyncedAt)
@@ -195,7 +196,7 @@ export const initSync = (
         if (state.is('started')) {
           return
         }
-        timer = setInterval(runHealthCheck, healthCheckInterval)
+        timer = setInterval(runHealthCheck, interval)
         state.change('started')
       }
       const stop = () => {
@@ -209,7 +210,7 @@ export const initSync = (
       return { start, stop }
     }
 
-    const healthCheck = healthChecker(options.healthCheckInterval)
+    const healthCheck = healthChecker()
 
     const start = async () => {
       debug('Starting initial scan')
@@ -238,7 +239,7 @@ export const initSync = (
         return
       }
       // Start the health check
-      if (options.enableHealthCheck) {
+      if (options.healthCheck?.enabled) {
         healthCheck.start()
       }
 
@@ -353,35 +354,38 @@ export const initSync = (
      * Periodically check that change stream events are being processed.
      * Only applies to records inserted into the collection.
      */
-    const healthChecker = (healthCheckInterval = ms('1m')) => {
+    const healthChecker = () => {
+      const {
+        field,
+        interval = ms('1m'),
+        maxSyncDelay = ms('5s'),
+      } = options.healthCheck || {}
       let timer: NodeJS.Timer
       const state = fsm(simpleStateTransistions, 'stopped', {
-        name: 'Health check - change stream',
+        name: 'Change stream health check',
         onStateChange: emitStateChange,
       })
 
       const runHealthCheck = async () => {
         debug('Checking health - change stream')
-        const lastHealthCheck = new Date().getTime() - healthCheckInterval
-        const [lastSyncedAt, lastRecordCreatedAt] = await Promise.all([
+        const [lastSyncedAt, lastRecordUpdatedAt] = await Promise.all([
           getLastSyncedAt(keys.lastChangeProcessedAtKey),
-          getLastRecordCreatedAt(),
+          // Typescript hack
+          getLastRecordUpdatedAt(field as string),
         ])
         debug('Last change processed at %d', lastSyncedAt)
-        debug('Last record created at %d', lastRecordCreatedAt)
-        const withinHealthCheck = (x?: number) => x && x > lastHealthCheck
-        // A record was created within the health check window but not synced.
-        // NOTE: It is possible for a record to be created a the end of the window
-        // but not synced before the next health check leading to a false failure.
+        debug('Last record created at %d', lastRecordUpdatedAt)
+        // A record was updated but not synced within 5 seconds of being updated
         if (
-          withinHealthCheck(lastRecordCreatedAt) &&
-          !withinHealthCheck(lastSyncedAt) &&
-          !state.is('stopped')
+          !state.is('stopped') &&
+          lastRecordUpdatedAt &&
+          lastSyncedAt &&
+          lastRecordUpdatedAt - lastSyncedAt > maxSyncDelay
         ) {
           debug('Health check failed - change stream')
           emit('healthCheckFail', {
             failureType: 'changeStream',
-            lastRecordCreatedAt,
+            lastRecordUpdatedAt,
             lastSyncedAt,
           })
         }
@@ -391,7 +395,7 @@ export const initSync = (
         if (state.is('started')) {
           return
         }
-        timer = setInterval(runHealthCheck, healthCheckInterval)
+        timer = setInterval(runHealthCheck, interval)
         state.change('started')
       }
       const stop = () => {
@@ -405,7 +409,7 @@ export const initSync = (
       return { start, stop }
     }
 
-    const healthCheck = healthChecker(options.healthCheckInterval)
+    const healthCheck = healthChecker()
 
     const start = async () => {
       debug('Starting change stream')
@@ -436,7 +440,7 @@ export const initSync = (
       )
       state.change('started')
       // Start the health check
-      if (options.enableHealthCheck) {
+      if (options.healthCheck?.enabled) {
         healthCheck.start()
       }
       // Get the change stream as an async iterator
