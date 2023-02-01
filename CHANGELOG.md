@@ -1,3 +1,7 @@
+# 0.34.0
+
+- Bump default `maxSyncDelay` to 5 minutes.
+
 # 0.33.0
 
 - Fixed cursor exhausted bug with initial scan.

@@ -355,7 +355,7 @@ export const initSync = (
       const {
         field,
         interval = ms('1m'),
-        maxSyncDelay = ms('5s'),
+        maxSyncDelay = ms('5m'),
       } = options.healthCheck || {}
       let timer: NodeJS.Timer
       const state = fsm(simpleStateTransistions, 'stopped', {
