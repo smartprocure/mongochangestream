@@ -440,12 +440,13 @@ export const initSync = (
       if (options.healthCheck?.enabled) {
         healthCheck.start()
       }
-      // Get the change stream as an async iterator
+      // Consume change stream
       while (await safelyCheckNext(changeStream)) {
         let event = await changeStream.next()
         debug('Change stream event %O', event)
         // Get resume token
         const token = event?._id
+        debug('token %o', token)
         // Omit nested fields that are not handled by $unset.
         // For example, if 'a' was omitted then 'a.b.c' should be omitted.
         if (event.operationType === 'update' && omit) {
