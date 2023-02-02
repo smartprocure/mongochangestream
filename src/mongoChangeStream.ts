@@ -6,6 +6,7 @@ import {
   Db,
   ChangeStream,
 } from 'mongodb'
+import * as mongodb from 'mongodb'
 import {
   Events,
   SyncOptions,
@@ -426,7 +427,7 @@ export const initSync = (
       const { changeStreamTokenKey } = keys
       // Lookup change stream token
       const token = await redis.get(changeStreamTokenKey)
-      const changeStreamOptions = token
+      const changeStreamOptions: mongodb.ChangeStreamOptions = token
         ? // Resume token found, so set change stream resume point
           { ...defaultOptions, resumeAfter: JSON.parse(token) }
         : defaultOptions
