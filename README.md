@@ -53,7 +53,7 @@ const schemaChange = await sync.detectSchemaChange(db, {
   shouldRemoveMetadata: true,
 })
 schemaChange.start()
-schemaChange.emitter.on('change', () => {
+sync.emitter.on('schemaChange', () => {
   initialScan.stop()
   changeStream.stop()
 })
