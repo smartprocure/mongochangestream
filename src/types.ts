@@ -35,6 +35,7 @@ export interface ScanOptions<T = any> {
     /** How often to run the health check. */
     interval?: number
   }
+  /** Defaults to _id */
   sortField?: SortField<T>
 }
 
