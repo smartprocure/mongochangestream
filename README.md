@@ -118,7 +118,8 @@ and resume from failures. Here are some scenarios:
 
 ### The server goes down
 
-In this scenario, processing will continue with the last recorded state.
+In this scenario, processing will continue with the last recorded state
+when resumed.
 
 ### The server is being shutdown with a sigterm
 
