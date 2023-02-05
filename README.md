@@ -6,7 +6,7 @@ prevent a potential race condition see the strategies section below.
 
 If the inital scan doesn't complete for any reason (e.g., server restart) the scan
 will resume where it left off. This is deterministic since the collection scan is sorted
-by `_id`. Change streams will likewise resume from the last resume token upon server
+by `_id` by default. Change streams will likewise resume from the last resume token upon server
 restarts. See the official MongoDB docs for more information on change stream resumption:
 
 https://www.mongodb.com/docs/manual/changeStreams/#std-label-change-stream-resume
