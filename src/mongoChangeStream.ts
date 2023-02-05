@@ -304,8 +304,8 @@ export const initSync = (
       // Change state
       state.change('started')
       // Take a snapshot of the last id inserted into the collection
-      const lastIdInsertedSnapshot = await getLastIdInserted()
-      debug('Last id inserted %s', lastIdInsertedSnapshot)
+      const lastIdInserted = await getLastIdInserted()
+      debug('Last id inserted %s', lastIdInserted)
 
       const ns = { db: collection.dbName, coll: collection.collectionName }
       // Process documents
@@ -329,9 +329,9 @@ export const initSync = (
       // Did we complete the initial scan?
       if (
         // No records in the collection
-        !lastIdInsertedSnapshot ||
-        // Final id processed was at least the last id inserted (snapshoted)
-        (finalIdProcessed && finalIdProcessed >= lastIdInsertedSnapshot)
+        !lastIdInserted ||
+        // Final id processed was at least the last id inserted as of start
+        (finalIdProcessed && finalIdProcessed >= lastIdInserted)
       ) {
         debug('Completed initial scan')
         // Stop the health check
@@ -418,7 +418,7 @@ export const initSync = (
         ])
         debug('Last change processed at %d', lastSyncedAt)
         debug('Last record created at %d', lastRecordUpdatedAt)
-        // A record was updated but not synced within 5 seconds of being updated
+        // A record was updated but not synced within maxSyncDelay of being updated
         if (
           !state.is('stopped') &&
           lastRecordUpdatedAt &&
@@ -469,10 +469,8 @@ export const initSync = (
       state.change('starting')
       // New deferred
       deferred = defer()
-      // Redis keys
-      const { changeStreamTokenKey } = keys
       // Lookup change stream token
-      const token = await redis.get(changeStreamTokenKey)
+      const token = await redis.get(keys.changeStreamTokenKey)
       const changeStreamOptions: mongodb.ChangeStreamOptions = token
         ? // Resume token found, so set change stream resume point
           { ...defaultOptions, resumeAfter: JSON.parse(token) }
@@ -503,7 +501,7 @@ export const initSync = (
         await processRecord(event)
         // Update change stream token
         await redis.mset(
-          changeStreamTokenKey,
+          keys.changeStreamTokenKey,
           JSON.stringify(token),
           keys.lastChangeProcessedAtKey,
           new Date().getTime()

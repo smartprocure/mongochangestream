@@ -32,7 +32,7 @@ const init = _.memoize(async (options?: SyncOptions) => {
   const sync = initSync(redis, coll, options)
   sync.emitter.on('stateChange', console.log)
 
-  return { sync, db, coll, redis }
+  return { sync, client, db, coll, redis }
 })
 
 const genUser = () => ({
@@ -148,6 +148,31 @@ test('initial scan should resume after stop', async () => {
   await setTimeout(ms('5s'))
   assert.ok(completed)
   assert.equal(processed.length, numDocs + 10)
+  // Stop
+  await initialScan.stop()
+})
+
+test('initial scan should not be marked as completed if connection is closed', async () => {
+  // init({}) is a memoize hack to get a new mongodb connection
+  const { sync, redis, client } = await init({})
+  await before()
+
+  const processed = []
+  const processRecords = async (docs: ChangeStreamInsertDocument[]) => {
+    await setTimeout(10)
+    processed.push(...docs)
+  }
+  const scanOptions = { batchSize: 50 }
+  const initialScan = await sync.runInitialScan(processRecords, scanOptions)
+  // Start
+  initialScan.start()
+  // Allow for some records to be processed
+  await setTimeout(200)
+  // Close the connection.
+  await client.close()
+  // Check if completed
+  const completedAt = await redis.get(sync.keys.scanCompletedKey)
+  assert.equal(completedAt, null)
   // Stop
   await initialScan.stop()
 })
