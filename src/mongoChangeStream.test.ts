@@ -59,9 +59,9 @@ const schema: JSONSchema = {
 
 const numDocs = 500
 
-const populateCollection = (collection: Collection) => {
+const populateCollection = (collection: Collection, count = numDocs) => {
   const users = []
-  for (let i = 0; i < numDocs; i++) {
+  for (let i = 0; i < count; i++) {
     users.push({ insertOne: { document: genUser() } })
   }
   return collection.bulkWrite(users)
@@ -94,26 +94,60 @@ test('should complete initial scan', async () => {
   await initialScan.stop()
 })
 
-test('initial scan should resume properly', async () => {
-  const { sync } = await init()
-  await before()
+test('should complete initial scan if collection is empty', async () => {
+  const { sync, coll } = await init()
+
+  // Reset state
+  await sync.reset()
+  await coll.deleteMany({})
 
   const processed = []
   const processRecords = async (docs: ChangeStreamInsertDocument[]) => {
     await setTimeout(50)
     processed.push(...docs)
   }
+  let completed = false
+  sync.emitter.on('initialScanComplete', () => {
+    completed = true
+  })
   const scanOptions = { batchSize: 100 }
   const initialScan = await sync.runInitialScan(processRecords, scanOptions)
+  // Wait for initial scan to complete
+  await initialScan.start()
+  assert.ok(completed)
+  assert.equal(processed.length, 0)
+  // Stop
+  await initialScan.stop()
+})
+
+test('initial scan should resume after stop', async () => {
+  const { sync, coll } = await init()
+  await before()
+
+  const processed = []
+  const processRecords = async (docs: ChangeStreamInsertDocument[]) => {
+    await setTimeout(10)
+    processed.push(...docs)
+  }
+  const scanOptions = { batchSize: 50 }
+  const initialScan = await sync.runInitialScan(processRecords, scanOptions)
+  let completed = false
+  sync.emitter.on('initialScanComplete', () => {
+    completed = true
+  })
   // Start
   initialScan.start()
   // Allow for some records to be processed
-  await setTimeout(50)
+  await setTimeout(500)
   // Stop the initial scan
   await initialScan.stop()
   // Wait for the initial scan to complete
-  await initialScan.start()
-  assert.equal(processed.length, numDocs)
+  initialScan.start()
+  // Add some more records
+  await populateCollection(coll, 10)
+  await setTimeout(ms('5s'))
+  assert.ok(completed)
+  assert.equal(processed.length, numDocs + 10)
   // Stop
   await initialScan.stop()
 })
