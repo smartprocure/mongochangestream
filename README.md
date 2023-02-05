@@ -99,6 +99,9 @@ by checking for the `healthCheckFail` event.
 
 ## Companion Libraries
 
+This library is meant to be built on. To that end, the following libraries are
+currently implemented and maintained.
+
 Sync MongoDB to MongoDB
 [mongo2mongo](https://www.npmjs.com/package/mongo2mongo)
 
@@ -107,6 +110,29 @@ Sync MongoDB to CrateDB
 
 Sync MongoDB to Elasticsearch
 [mongo2elastic](https://www.npmjs.com/package/mongo2elastic)
+
+## Resilience
+
+Both the initial scan and change stream processing are designed to handle
+and resume from failures. Here are some scenarios:
+
+- The server goes down.
+- The server is being shutdown with a sigterm.
+- The primary goes down and a new primary is elected.
+
+### The server goes down
+
+In this scenario, processing will continue with the last recorded state.
+
+### The server is being shutdown with a sigterm
+
+In this scenario, calling `stop` for the initial scan and change stream
+will cleanly end processing.
+
+### The primary goes down and a new primary is elected
+
+In this scenario, you will need to enable health checks and restart the
+initial scan and/or change stream when a health check failure occurs.
 
 ## Change Stream Strategies
 
