@@ -116,17 +116,17 @@ Sync MongoDB to Elasticsearch
 Both the initial scan and change stream processing are designed to handle
 and resume from failures. Here are some scenarios:
 
-### The server goes down
+### The syncing server goes down
 
 In this scenario, processing will continue with the last recorded state
 when resumed.
 
-### The server is being shutdown with a sigterm
+### The syncing server is being shutdown with a sigterm
 
 In this scenario, calling `stop` for the initial scan and change stream
 will cleanly end processing.
 
-### The primary goes down and a new primary is elected
+### The MongoDB primary goes down and a new primary is elected
 
 In this scenario, you will need to enable health checks and restart the
 initial scan and/or change stream when a health check failure occurs.
