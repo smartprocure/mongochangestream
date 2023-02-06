@@ -312,6 +312,7 @@ export const initSync = (
       while (await safelyCheckNext(cursor)) {
         const doc = await cursor.next()
         debug('Initial scan doc %O', doc)
+        // Doc can be null if cursor is closed
         if (doc) {
           const changeStreamDoc = {
             fullDocument: doc,
