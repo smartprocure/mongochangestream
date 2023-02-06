@@ -138,7 +138,7 @@ export const initSync = (
     })
 
   /**
-   * Get the timestamp of the last record updated
+   * Get the timestamp of the last record updated. Assumes the field is a date.
    */
   const getLastRecordUpdatedAt = (field: string): Promise<number | undefined> =>
     collection
