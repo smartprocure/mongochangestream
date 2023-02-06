@@ -21,10 +21,7 @@ export interface SyncOptions {
 
 export interface SortField<T> {
   field: string
-  /**
-   * Function to serialize value to string. Must be sortable in string form.
-   * For dates, use ISO strings.
-   */
+  /** Function to serialize value to string. */
   serialize: (x: T) => string
   deserialize: (x: string) => T
 }

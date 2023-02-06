@@ -153,10 +153,10 @@ export const initSync = (
         }
       })
 
-  const runInitialScan = async (
+  async function runInitialScan<T = any>(
     processRecords: ProcessRecords,
-    options: QueueOptions & ScanOptions = {}
-  ) => {
+    options: QueueOptions & ScanOptions<T> = {}
+  ) {
     let deferred: Deferred
     let cursor: ReturnType<typeof collection.find>
     const state = fsm(stateTransitions, 'stopped', {
@@ -171,18 +171,16 @@ export const initSync = (
 
     const sortField = options.sortField || defaultSortField
 
-    /** Get the last id inserted, serialized */
+    /** Get the last id inserted */
     const getLastIdInserted = () =>
       collection
         .find()
+        .project({ [sortField.field]: 1 })
         .sort({ [sortField.field]: -1 })
         .limit(1)
         .toArray()
         .then((x) => {
-          const val = x[0]?.[sortField.field]
-          if (val) {
-            return sortField.serialize(val)
-          }
+          return x[0]?.[sortField.field]
         })
 
     const getCursor = async () => {
@@ -332,7 +330,8 @@ export const initSync = (
         // No records in the collection
         !lastIdInserted ||
         // Final id processed was at least the last id inserted as of start
-        (finalIdProcessed && finalIdProcessed >= lastIdInserted)
+        (finalIdProcessed &&
+          sortField.deserialize(finalIdProcessed) >= lastIdInserted)
       ) {
         debug('Completed initial scan')
         // Stop the health check
