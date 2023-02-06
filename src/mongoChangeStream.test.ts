@@ -7,7 +7,6 @@ import assert from 'node:assert'
 import { initSync } from './mongoChangeStream.js'
 import {
   JSONSchema,
-  SyncOptions,
   SchemaChangeEvent,
   ScanOptions,
   ChangeStreamOptions,
@@ -24,16 +23,22 @@ import ms from 'ms'
 import { setTimeout } from 'node:timers/promises'
 import { QueueOptions } from 'prom-utils'
 
-const init = _.memoize(async (options?: SyncOptions) => {
+const getConns = _.memoize(async (x?: any) => {
+  console.log(x)
   const redis = new Redis({ keyPrefix: 'testing:' })
   const client = await MongoClient.connect(process.env.MONGO_CONN as string)
   const db = client.db()
   const coll = db.collection('testing')
-  const sync = initSync(redis, coll, options)
-  sync.emitter.on('stateChange', console.log)
 
-  return { sync, client, db, coll, redis }
+  return { client, db, coll, redis }
 })
+
+const getSync = async () => {
+  const { redis, coll } = await getConns()
+  const sync = initSync(redis, coll)
+  sync.emitter.on('stateChange', console.log)
+  return sync
+}
 
 const genUser = () => ({
   name: faker.name.fullName(),
@@ -67,8 +72,10 @@ const populateCollection = (collection: Collection, count = numDocs) => {
   return collection.bulkWrite(users)
 }
 
-const before = async () => {
-  const { sync, coll } = await init()
+const initState = async (
+  sync: ReturnType<typeof initSync>,
+  coll: Collection
+) => {
   // Reset state
   await sync.reset()
   await coll.deleteMany({})
@@ -77,8 +84,9 @@ const before = async () => {
 }
 
 test('should complete initial scan', async () => {
-  const { sync } = await init()
-  await before()
+  const { coll } = await getConns()
+  const sync = await getSync()
+  await initState(sync, coll)
 
   const processed = []
   const processRecords = async (docs: ChangeStreamInsertDocument[]) => {
@@ -95,7 +103,8 @@ test('should complete initial scan', async () => {
 })
 
 test('should complete initial scan if collection is empty', async () => {
-  const { sync, coll } = await init()
+  const { coll } = await getConns()
+  const sync = await getSync()
 
   // Reset state
   await sync.reset()
@@ -121,8 +130,9 @@ test('should complete initial scan if collection is empty', async () => {
 })
 
 test('initial scan should resume after stop', async () => {
-  const { sync, coll } = await init()
-  await before()
+  const { coll } = await getConns()
+  const sync = await getSync()
+  await initState(sync, coll)
 
   const processed = []
   const processRecords = async (docs: ChangeStreamInsertDocument[]) => {
@@ -153,9 +163,11 @@ test('initial scan should resume after stop', async () => {
 })
 
 test('initial scan should not be marked as completed if connection is closed', async () => {
-  // init({}) is a memoize hack to get a new mongodb connection
-  const { sync, redis, client } = await init({})
-  await before()
+  // Memoize hack
+  const { coll, redis, client } = await getConns({})
+  const sync = initSync(redis, coll)
+  sync.emitter.on('stateChange', console.log)
+  await initState(sync, coll)
 
   const processed = []
   const processRecords = async (docs: ChangeStreamInsertDocument[]) => {
@@ -170,6 +182,8 @@ test('initial scan should not be marked as completed if connection is closed', a
   await setTimeout(200)
   // Close the connection.
   await client.close()
+  // Allow for some time
+  await setTimeout(100)
   // Check if completed
   const completedAt = await redis.get(sync.keys.scanCompletedKey)
   assert.equal(completedAt, null)
@@ -178,8 +192,9 @@ test('initial scan should not be marked as completed if connection is closed', a
 })
 
 test('should process records via change stream', async () => {
-  const { sync, coll } = await init()
-  await before()
+  const { coll } = await getConns()
+  const sync = await getSync()
+  await initState(sync, coll)
 
   const processed = []
   const processRecord = async (doc: ChangeStreamDocument) => {
@@ -200,8 +215,9 @@ test('should process records via change stream', async () => {
 })
 
 test('change stream should resume properly', async () => {
-  const { sync, coll } = await init()
-  await before()
+  const { coll } = await getConns()
+  const sync = await getSync()
+  await initState(sync, coll)
 
   const processed = []
   // Change stream
@@ -229,7 +245,7 @@ test('change stream should resume properly', async () => {
 })
 
 test('starting change stream is idempotent', async () => {
-  const { sync } = await init()
+  const sync = await getSync()
   // Change stream
   const processRecord = async () => {
     await setTimeout(5)
@@ -242,8 +258,9 @@ test('starting change stream is idempotent', async () => {
 })
 
 test('stopping change stream is idempotent', async () => {
-  const { sync, coll } = await init()
-  await before()
+  const { coll } = await getConns()
+  const sync = await getSync()
+  await initState(sync, coll)
 
   // Change stream
   const processRecord = async () => {
@@ -259,8 +276,9 @@ test('stopping change stream is idempotent', async () => {
 })
 
 test('starting initial scan is idempotent', async () => {
-  const { sync } = await init()
-  await before()
+  const { coll } = await getConns()
+  const sync = await getSync()
+  await initState(sync, coll)
 
   const processRecords = async () => {
     await setTimeout(50)
@@ -273,8 +291,9 @@ test('starting initial scan is idempotent', async () => {
 })
 
 test('stopping initial scan is idempotent', async () => {
-  const { sync } = await init()
-  await before()
+  const { coll } = await getConns()
+  const sync = await getSync()
+  await initState(sync, coll)
 
   const processRecords = async () => {
     await setTimeout(50)
@@ -288,8 +307,9 @@ test('stopping initial scan is idempotent', async () => {
 })
 
 test('Should resync when resync flag is set', async () => {
-  const { sync, redis } = await init()
-  await before()
+  const { coll, redis } = await getConns()
+  const sync = await getSync()
+  await initState(sync, coll)
 
   let resyncTriggered = false
   const processed = []
@@ -331,7 +351,7 @@ test('Should resync when resync flag is set', async () => {
 })
 
 test('Resync start/stop is idempotent', async () => {
-  const { sync } = await init()
+  const sync = await getSync()
 
   const resync = sync.detectResync()
   resync.start()
@@ -341,7 +361,8 @@ test('Resync start/stop is idempotent', async () => {
 })
 
 test('Detect schema change', async () => {
-  const { db, coll, sync } = await init()
+  const { db, coll } = await getConns()
+  const sync = await getSync()
   // Set schema
   await db.command({
     collMod: coll.collectionName,
@@ -370,7 +391,8 @@ test('Detect schema change', async () => {
 })
 
 test('Schema change start/stop is idempotent', async () => {
-  const { sync, db } = await init()
+  const { db } = await getConns()
+  const sync = await getSync()
 
   const schemaChange = await sync.detectSchemaChange(db)
   schemaChange.start()
@@ -380,8 +402,9 @@ test('Schema change start/stop is idempotent', async () => {
 })
 
 test('should fail health check - initial scan', async () => {
-  const { sync } = await init()
-  await before()
+  const { coll } = await getConns()
+  const sync = await getSync()
+  await initState(sync, coll)
 
   let healthCheckFailed = false
   const processed = []
@@ -408,8 +431,9 @@ test('should fail health check - initial scan', async () => {
 })
 
 test('should fail health check - change stream', async () => {
-  const { sync, coll } = await init()
-  await before()
+  const { coll } = await getConns()
+  const sync = await getSync()
+  await initState(sync, coll)
 
   let healthCheckFailed = false
   const processed = []
