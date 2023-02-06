@@ -18,6 +18,7 @@ import {
   JSONSchema,
   State,
   SimpleState,
+  SortField,
 } from './types.js'
 import _debug from 'debug'
 import type { Redis } from 'ioredis'
@@ -63,12 +64,6 @@ export const getKeys = (collection: Collection) => {
   }
 }
 
-export const defaultSortField = {
-  field: '_id',
-  serialize: _.toString,
-  deserialize: (x: string) => new ObjectId(x),
-}
-
 const stateTransitions: StateTransitions<State> = {
   stopped: ['starting'],
   starting: ['started'],
@@ -95,7 +90,7 @@ export const initSync = (
   }
   const emitStateChange = (change: object) => emit('stateChange', change)
 
-  // Detect if resync flag is set
+  /** Detect if resync flag is set */
   const detectResync = (resyncCheckInterval = ms('1m')) => {
     let resyncTimer: NodeJS.Timer
     const state = fsm(simpleStateTransistions, 'stopped', {
@@ -143,7 +138,7 @@ export const initSync = (
     })
 
   /**
-   * Get the timestamp of the last record updated
+   * Get the timestamp of the last record updated. Assumes the field is a date.
    */
   const getLastRecordUpdatedAt = (field: string): Promise<number | undefined> =>
     collection
@@ -158,16 +153,57 @@ export const initSync = (
         }
       })
 
-  const runInitialScan = async (
+  async function runInitialScan<T = any>(
     processRecords: ProcessRecords,
-    options: QueueOptions & ScanOptions = {}
-  ) => {
+    options: QueueOptions & ScanOptions<T> = {}
+  ) {
     let deferred: Deferred
     let cursor: ReturnType<typeof collection.find>
     const state = fsm(stateTransitions, 'stopped', {
       name: 'Initial scan',
       onStateChange: emitStateChange,
     })
+    const defaultSortField: SortField<ObjectId> = {
+      field: '_id',
+      serialize: _.toString,
+      deserialize: (x: string) => new ObjectId(x),
+    }
+
+    const sortField = options.sortField || defaultSortField
+
+    /** Get the last id inserted */
+    const getLastIdInserted = () =>
+      collection
+        .find()
+        .project({ [sortField.field]: 1 })
+        .sort({ [sortField.field]: -1 })
+        .limit(1)
+        .toArray()
+        .then((x) => {
+          return x[0]?.[sortField.field]
+        })
+
+    const getCursor = async () => {
+      // Lookup last id successfully processed
+      const lastIdProcessed = await redis.get(keys.lastScanIdKey)
+      debug('Last id processed %s', lastIdProcessed)
+      // Query collection
+      return (
+        collection
+          // Skip ids already processed
+          .find(
+            lastIdProcessed
+              ? {
+                  [sortField.field]: {
+                    $gt: sortField.deserialize(lastIdProcessed),
+                  },
+                }
+              : {},
+            omit ? { projection: setDefaults(omit, 0) } : {}
+          )
+          .sort({ [sortField.field]: 1 })
+      )
+    }
 
     /**
      * Periodically check that records are being processed.
@@ -213,6 +249,7 @@ export const initSync = (
 
     const healthCheck = healthChecker()
 
+    /** Start the initial scan */
     const start = async () => {
       debug('Starting initial scan')
       // Nothing to do
@@ -226,11 +263,8 @@ export const initSync = (
       }
       state.change('starting')
       deferred = defer()
-      const sortField = options.sortField || defaultSortField
-      // Redis keys
-      const { scanCompletedKey, lastScanIdKey } = keys
       // Determine if initial scan has already completed
-      const scanCompleted = await redis.get(scanCompletedKey)
+      const scanCompleted = await redis.get(keys.scanCompletedKey)
       // Scan already completed so return
       if (scanCompleted) {
         debug(`Initial scan previously completed on %s`, scanCompleted)
@@ -247,61 +281,72 @@ export const initSync = (
       const _processRecords = async (records: ChangeStreamInsertDocument[]) => {
         // Process batch of records
         await processRecords(records)
+        debug('Processed %d records', records.length)
         const lastDocument = records[records.length - 1].fullDocument
         // Record last id of the batch
         const lastId = _.get(sortField.field, lastDocument)
+        debug('Last id %s', lastId)
         if (lastId) {
           await redis.mset(
-            lastScanIdKey,
+            keys.lastScanIdKey,
             sortField.serialize(lastId),
             keys.lastScanProcessedAtKey,
             new Date().getTime()
           )
         }
       }
-      // Lookup last id successfully processed
-      const lastId = await redis.get(lastScanIdKey)
-      debug('Last scan id %s', lastId)
       // Create queue
       const queue = batchQueue(_processRecords, options)
       // Query collection
-      cursor = collection
-        // Skip ids already processed
-        .find(
-          lastId
-            ? { [sortField.field]: { $gt: sortField.deserialize(lastId) } }
-            : {},
-          omit ? { projection: setDefaults(omit, 0) } : {}
-        )
-        .sort({ [sortField.field]: 1 })
+      cursor = await getCursor()
       // Change state
       state.change('started')
+      // Take a snapshot of the last id inserted into the collection
+      const lastIdInserted = await getLastIdInserted()
+      debug('Last id inserted %s', lastIdInserted)
+
       const ns = { db: collection.dbName, coll: collection.collectionName }
       // Process documents
       while (await safelyCheckNext(cursor)) {
         const doc = await cursor.next()
         debug('Initial scan doc %O', doc)
-        const changeStreamDoc = {
-          fullDocument: doc,
-          operationType: 'insert',
-          ns,
-        } as unknown as ChangeStreamInsertDocument
-        await queue.enqueue(changeStreamDoc)
+        // Doc can be null if cursor is closed
+        if (doc) {
+          const changeStreamDoc = {
+            fullDocument: doc,
+            operationType: 'insert',
+            ns,
+          } as unknown as ChangeStreamInsertDocument
+          await queue.enqueue(changeStreamDoc)
+        }
       }
       // Flush the queue
       await queue.flush()
-      // Don't record scan complete if stopping
-      if (!state.is('stopping')) {
+      // Final id processed
+      const finalIdProcessed = await redis.get(keys.lastScanIdKey)
+      debug('Final id processed %s', finalIdProcessed)
+      // Did we complete the initial scan?
+      if (
+        // No records in the collection
+        !lastIdInserted ||
+        // Final id processed was at least the last id inserted as of start
+        (finalIdProcessed &&
+          sortField.deserialize(finalIdProcessed) >= lastIdInserted)
+      ) {
         debug('Completed initial scan')
         // Stop the health check
         healthCheck.stop()
         // Record scan complete
-        await redis.set(scanCompletedKey, new Date().toString())
+        await redis.set(keys.scanCompletedKey, new Date().toString())
+        // Emit event
+        emit('initialScanComplete', { lastId: finalIdProcessed })
       }
+      // Resolve deferred
       deferred.done()
       debug('Exit initial scan')
     }
 
+    /** Stop the initial scan */
     const stop = async () => {
       debug('Stopping initial scan')
       // Nothing to do
@@ -325,6 +370,7 @@ export const initSync = (
       debug('Stopped initial scan')
     }
 
+    /** Restart the initial scan */
     const restart = async () => {
       debug('Restarting initial scan')
       await stop()
@@ -333,8 +379,6 @@ export const initSync = (
 
     return { start, stop, restart }
   }
-
-  const defaultOptions = { fullDocument: 'updateLookup' }
 
   const processChangeStream = async (
     processRecord: ProcessRecord,
@@ -347,6 +391,7 @@ export const initSync = (
       onStateChange: emitStateChange,
     })
     const pipeline = options.pipeline || []
+    const defaultOptions = { fullDocument: 'updateLookup' }
 
     /**
      * Periodically check that change stream events are being processed.
@@ -373,7 +418,7 @@ export const initSync = (
         ])
         debug('Last change processed at %d', lastSyncedAt)
         debug('Last record created at %d', lastRecordUpdatedAt)
-        // A record was updated but not synced within 5 seconds of being updated
+        // A record was updated but not synced within maxSyncDelay of being updated
         if (
           !state.is('stopped') &&
           lastRecordUpdatedAt &&
@@ -409,6 +454,7 @@ export const initSync = (
 
     const healthCheck = healthChecker()
 
+    /** Start processing change stream */
     const start = async () => {
       debug('Starting change stream')
       // Nothing to do
@@ -423,10 +469,8 @@ export const initSync = (
       state.change('starting')
       // New deferred
       deferred = defer()
-      // Redis keys
-      const { changeStreamTokenKey } = keys
       // Lookup change stream token
-      const token = await redis.get(changeStreamTokenKey)
+      const token = await redis.get(keys.changeStreamTokenKey)
       const changeStreamOptions: mongodb.ChangeStreamOptions = token
         ? // Resume token found, so set change stream resume point
           { ...defaultOptions, resumeAfter: JSON.parse(token) }
@@ -457,7 +501,7 @@ export const initSync = (
         await processRecord(event)
         // Update change stream token
         await redis.mset(
-          changeStreamTokenKey,
+          keys.changeStreamTokenKey,
           JSON.stringify(token),
           keys.lastChangeProcessedAtKey,
           new Date().getTime()
@@ -467,6 +511,7 @@ export const initSync = (
       debug('Exit change stream')
     }
 
+    /** Stop processing change stream */
     const stop = async () => {
       debug('Stopping change stream')
       // Nothing to do
@@ -490,6 +535,7 @@ export const initSync = (
       debug('Stopped change stream')
     }
 
+    /** Restart change stream */
     const restart = async () => {
       debug('Restarting change stream')
       await stop()

@@ -1,3 +1,8 @@
+# 0.35.0
+
+- Handle master failover scenario properly for initial scan.
+- Emait `initialScanComplete` when initial scan is complete.
+
 # 0.34.0
 
 - Bump default `maxSyncDelay` to 5 minutes.

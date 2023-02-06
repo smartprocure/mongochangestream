@@ -6,7 +6,7 @@ prevent a potential race condition see the strategies section below.
 
 If the inital scan doesn't complete for any reason (e.g., server restart) the scan
 will resume where it left off. This is deterministic since the collection scan is sorted
-by `_id`. Change streams will likewise resume from the last resume token upon server
+by `_id` by default. Change streams will likewise resume from the last resume token upon server
 restarts. See the official MongoDB docs for more information on change stream resumption:
 
 https://www.mongodb.com/docs/manual/changeStreams/#std-label-change-stream-resume
@@ -53,7 +53,7 @@ const schemaChange = await sync.detectSchemaChange(db, {
   shouldRemoveMetadata: true,
 })
 schemaChange.start()
-schemaChange.emitter.on('change', () => {
+sync.emitter.on('schemaChange', () => {
   initialScan.stop()
   changeStream.stop()
 })
@@ -99,6 +99,9 @@ by checking for the `healthCheckFail` event.
 
 ## Companion Libraries
 
+This library is meant to be built on. To that end, the following libraries are
+currently implemented and maintained.
+
 Sync MongoDB to MongoDB
 [mongo2mongo](https://www.npmjs.com/package/mongo2mongo)
 
@@ -107,6 +110,26 @@ Sync MongoDB to CrateDB
 
 Sync MongoDB to Elasticsearch
 [mongo2elastic](https://www.npmjs.com/package/mongo2elastic)
+
+## Resilience
+
+Both the initial scan and change stream processing are designed to handle
+and resume from failures. Here are some scenarios:
+
+### The syncing server goes down
+
+In this scenario, processing will continue with the last recorded state
+when resumed.
+
+### The syncing server is being shutdown with a sigterm
+
+In this scenario, calling `stop` for the initial scan and change stream
+will cleanly end processing.
+
+### The MongoDB primary goes down and a new primary is elected
+
+In this scenario, you will need to enable health checks and restart the
+initial scan and/or change stream when a health check failure occurs.
 
 ## Change Stream Strategies
 

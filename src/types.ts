@@ -19,17 +19,21 @@ export interface SyncOptions {
   omit?: string[]
 }
 
+export interface SortField<T> {
+  field: string
+  /** Function to serialize value to string. */
+  serialize: (x: T) => string
+  deserialize: (x: string) => T
+}
+
 export interface ScanOptions<T = any> {
   healthCheck?: {
     enabled: boolean
     /** How often to run the health check. */
     interval?: number
   }
-  sortField?: {
-    field: string
-    serialize: (x: T) => string
-    deserialize: (x: string) => T
-  }
+  /** Defaults to _id */
+  sortField?: SortField<T>
 }
 
 export interface ChangeStreamOptions {
@@ -59,6 +63,7 @@ export type Events =
   | 'resync'
   | 'schemaChange'
   | 'stateChange'
+  | 'initialScanComplete'
 
 interface InitialScanFailEvent {
   type: 'healthCheckFail'
@@ -89,6 +94,11 @@ export interface StateChangeEvent {
   type: 'stateChange'
   from: string
   to: string
+}
+
+export interface InitialScanComplete {
+  type: 'initialScanComplete'
+  lastId: string
 }
 
 // State
