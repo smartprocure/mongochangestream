@@ -34,6 +34,7 @@ export interface ScanOptions<T = any> {
   }
   /** Defaults to _id */
   sortField?: SortField<T>
+  pipeline?: Document[]
 }
 
 export interface ChangeStreamOptions {

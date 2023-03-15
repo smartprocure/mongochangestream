@@ -83,7 +83,6 @@ export const initSync = (
 ) => {
   const keys = getKeys(collection)
   const { omit } = options
-  const omitPipeline = omit ? generatePipelineFromOmit(omit) : []
   const emitter = new EventEmitter()
   const emit = (event: Events, data: object) => {
     emitter.emit(event, { type: event, ...data })
@@ -157,8 +156,9 @@ export const initSync = (
     processRecords: ProcessRecords,
     options: QueueOptions & ScanOptions<T> = {}
   ) {
+    const pipeline = options.pipeline || []
     let deferred: Deferred
-    let cursor: ReturnType<typeof collection.find>
+    let cursor: ReturnType<typeof collection.aggregate>
     const state = fsm(stateTransitions, 'stopped', {
       name: 'Initial scan',
       onStateChange: emitStateChange,
@@ -188,21 +188,23 @@ export const initSync = (
       const lastIdProcessed = await redis.get(keys.lastScanIdKey)
       debug('Last id processed %s', lastIdProcessed)
       // Query collection
-      return (
-        collection
-          // Skip ids already processed
-          .find(
-            lastIdProcessed
-              ? {
+      return collection.aggregate([
+        // Skip ids already processed
+        ...(lastIdProcessed
+          ? [
+              {
+                $match: {
                   [sortField.field]: {
                     $gt: sortField.deserialize(lastIdProcessed),
                   },
-                }
-              : {},
-            omit ? { projection: setDefaults(omit, 0) } : {}
-          )
-          .sort({ [sortField.field]: 1 })
-      )
+                },
+              },
+            ]
+          : []),
+        { $sort: { [sortField.field]: 1 } },
+        ...(omit ? [{ $project: setDefaults(omit, 0) }] : []),
+        ...pipeline,
+      ])
     }
 
     /**
@@ -384,13 +386,14 @@ export const initSync = (
     processRecord: ProcessRecord,
     options: ChangeStreamOptions = {}
   ) => {
+    const pipeline = options.pipeline || []
+    const omitPipeline = omit ? generatePipelineFromOmit(omit) : []
     let deferred: Deferred
     let changeStream: ChangeStream
     const state = fsm(stateTransitions, 'stopped', {
       name: 'Change stream',
       onStateChange: emitStateChange,
     })
-    const pipeline = options.pipeline || []
     const defaultOptions = { fullDocument: 'updateLookup' }
 
     /**
