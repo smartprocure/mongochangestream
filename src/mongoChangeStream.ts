@@ -83,7 +83,6 @@ export const initSync = (
 ) => {
   const keys = getKeys(collection)
   const { omit } = options
-  const omitPipeline = omit ? generatePipelineFromOmit(omit) : []
   const emitter = new EventEmitter()
   const emit = (event: Events, data: object) => {
     emitter.emit(event, { type: event, ...data })
@@ -158,7 +157,7 @@ export const initSync = (
     options: QueueOptions & ScanOptions<T> = {}
   ) {
     let deferred: Deferred
-    let cursor: ReturnType<typeof collection.find>
+    let cursor: ReturnType<typeof collection.aggregate>
     const state = fsm(stateTransitions, 'stopped', {
       name: 'Initial scan',
       onStateChange: emitStateChange,
@@ -188,21 +187,27 @@ export const initSync = (
       const lastIdProcessed = await redis.get(keys.lastScanIdKey)
       debug('Last id processed %s', lastIdProcessed)
       // Query collection
-      return (
-        collection
-          // Skip ids already processed
-          .find(
-            lastIdProcessed
-              ? {
+      const omitPipeline = omit ? [{ $project: setDefaults(omit, 0) }] : []
+      const extendedPipeline = options.pipeline ?? []
+      const pipeline = [
+        // Skip ids already processed
+        ...(lastIdProcessed
+          ? [
+              {
+                $match: {
                   [sortField.field]: {
                     $gt: sortField.deserialize(lastIdProcessed),
                   },
-                }
-              : {},
-            omit ? { projection: setDefaults(omit, 0) } : {}
-          )
-          .sort({ [sortField.field]: 1 })
-      )
+                },
+              },
+            ]
+          : []),
+        { $sort: { [sortField.field]: 1 } },
+        ...omitPipeline,
+        ...extendedPipeline,
+      ]
+      debug('Initial scan pipeline %O', pipeline)
+      return collection.aggregate(pipeline)
     }
 
     /**
@@ -390,7 +395,6 @@ export const initSync = (
       name: 'Change stream',
       onStateChange: emitStateChange,
     })
-    const pipeline = options.pipeline || []
     const defaultOptions = { fullDocument: 'updateLookup' }
 
     /**
@@ -454,6 +458,20 @@ export const initSync = (
 
     const healthCheck = healthChecker()
 
+    const getChangeStream = async () => {
+      const omitPipeline = omit ? generatePipelineFromOmit(omit) : []
+      const extendedPipeline = options.pipeline ?? []
+      const pipeline = [...omitPipeline, ...extendedPipeline]
+      debug('Change stream pipeline %O', pipeline)
+      // Lookup change stream token
+      const token = await redis.get(keys.changeStreamTokenKey)
+      const changeStreamOptions: mongodb.ChangeStreamOptions = token
+        ? // Resume token found, so set change stream resume point
+          { ...defaultOptions, resumeAfter: JSON.parse(token) }
+        : defaultOptions
+      return collection.watch(pipeline, changeStreamOptions)
+    }
+
     /** Start processing change stream */
     const start = async () => {
       debug('Starting change stream')
@@ -469,17 +487,8 @@ export const initSync = (
       state.change('starting')
       // New deferred
       deferred = defer()
-      // Lookup change stream token
-      const token = await redis.get(keys.changeStreamTokenKey)
-      const changeStreamOptions: mongodb.ChangeStreamOptions = token
-        ? // Resume token found, so set change stream resume point
-          { ...defaultOptions, resumeAfter: JSON.parse(token) }
-        : defaultOptions
       // Start the change stream
-      changeStream = collection.watch(
-        [...omitPipeline, ...pipeline],
-        changeStreamOptions
-      )
+      changeStream = await getChangeStream()
       state.change('started')
       // Start the health check
       if (options.healthCheck?.enabled) {

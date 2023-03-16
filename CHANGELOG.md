@@ -1,3 +1,7 @@
+# 0.36.0
+
+- Optional `pipeline` for `runInitialScan`.
+
 # 0.35.0
 
 - Handle master failover scenario properly for initial scan.
