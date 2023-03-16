@@ -104,6 +104,25 @@ test('should complete initial scan', async () => {
   await initialScan.stop()
 })
 
+test('should omit fields from initial scan', async () => {
+  const { coll } = await getConns()
+  const sync = await getSync({ omit: ['name'] })
+  await initState(sync, coll)
+
+  const documents: Document[] = []
+  const processRecords = async (docs: ChangeStreamInsertDocument[]) => {
+    await setTimeout(50)
+    documents.push(docs[0].fullDocument)
+  }
+  const scanOptions = { batchSize: 100 }
+  const initialScan = await sync.runInitialScan(processRecords, scanOptions)
+  // Wait for initial scan to complete
+  await initialScan.start()
+  assert.equal(documents[0].name, undefined)
+  // Stop
+  await initialScan.stop()
+})
+
 test('should complete initial scan if collection is empty', async () => {
   const { coll } = await getConns()
   const sync = await getSync()
