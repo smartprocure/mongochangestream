@@ -37,6 +37,7 @@ export interface ScanOptions<T = any> {
   }
   /** Defaults to _id */
   sortField?: SortField<T>
+  /** Extend the pipeline. Be careful not to exclude the sort field or change the sort order. */
   pipeline?: Document[]
 }
 
