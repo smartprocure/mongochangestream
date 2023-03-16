@@ -10,6 +10,7 @@ import {
   SchemaChangeEvent,
   ScanOptions,
   ChangeStreamOptions,
+  SyncOptions,
 } from './types.js'
 import {
   Document,
@@ -34,9 +35,9 @@ const getConns = _.memoize(async (x?: any) => {
   return { client, db, coll, redis }
 })
 
-const getSync = async () => {
+const getSync = async (options?: SyncOptions) => {
   const { redis, coll } = await getConns()
-  const sync = initSync(redis, coll)
+  const sync = initSync(redis, coll, options)
   sync.emitter.on('stateChange', console.log)
   return sync
 }
@@ -240,6 +241,31 @@ test('should process records via change stream', async () => {
   // Wait for the change stream events to be processed
   await setTimeout(ms('10s'))
   assert.equal(processed.length, numDocs)
+  // Stop
+  await changeStream.stop()
+})
+
+test('should omit fields from change stream', async () => {
+  const { coll } = await getConns()
+  const sync = await getSync({ omit: ['name'] })
+  await initState(sync, coll)
+
+  const documents: Document[] = []
+  const processRecord = async (doc: ChangeStreamDocument) => {
+    await setTimeout(5)
+    if (doc.operationType === 'update' && doc.fullDocument) {
+      documents.push(doc.fullDocument)
+    }
+  }
+  const changeStream = await sync.processChangeStream(processRecord)
+  // Start
+  changeStream.start()
+  await setTimeout(ms('1s'))
+  // Update records
+  coll.updateMany({}, { $set: { name: 'unknown' } })
+  // Wait for the change stream events to be processed
+  await setTimeout(ms('2s'))
+  assert.equal(documents[0].name, undefined)
   // Stop
   await changeStream.stop()
 })

@@ -187,6 +187,7 @@ export const initSync = (
       const lastIdProcessed = await redis.get(keys.lastScanIdKey)
       debug('Last id processed %s', lastIdProcessed)
       // Query collection
+      const omitPipeline = omit ? [{ $project: setDefaults(omit, 0) }] : []
       const extendedPipeline = options.pipeline ?? []
       const pipeline = [
         // Skip ids already processed
@@ -202,7 +203,7 @@ export const initSync = (
             ]
           : []),
         { $sort: { [sortField.field]: 1 } },
-        ...(omit ? [{ $project: setDefaults(omit, 0) }] : []),
+        ...omitPipeline,
         ...extendedPipeline,
       ]
       debug('Initial scan pipeline %O', pipeline)
