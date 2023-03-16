@@ -12,6 +12,7 @@ import {
   ChangeStreamOptions,
 } from './types.js'
 import {
+  Document,
   ChangeStreamDocument,
   ChangeStreamInsertDocument,
   MongoClient,
@@ -189,6 +190,35 @@ test('initial scan should not be marked as completed if connection is closed', a
   assert.equal(completedAt, null)
   // Stop
   await initialScan.stop()
+})
+
+test('initial scan should support custom pipeline', async () => {
+  const { coll } = await getConns()
+  const sync = await getSync()
+  await initState(sync, coll)
+
+  sync.emitter.on('stateChange', console.log)
+  await initState(sync, coll)
+
+  const documents: Document[] = []
+  const processRecords = async (docs: ChangeStreamInsertDocument[]) => {
+    await setTimeout(10)
+    documents.push(docs[0].fullDocument)
+  }
+  const scanOptions: QueueOptions & ScanOptions = {
+    batchSize: 50,
+    pipeline: [
+      { $addFields: { cityState: { $concat: ['$city', '-', '$state'] } } },
+    ],
+  }
+  const initialScan = await sync.runInitialScan(processRecords, scanOptions)
+  // Start
+  initialScan.start()
+  // Allow for some records to be processed
+  await setTimeout(500)
+  // Stop
+  await initialScan.stop()
+  assert.ok(documents[0].cityState)
 })
 
 test('should process records via change stream', async () => {
