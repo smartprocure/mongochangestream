@@ -1,9 +1,12 @@
 import {
+  ChangeStream,
+  AggregationCursor,
   ChangeStreamDocument,
   ChangeStreamInsertDocument,
   Document,
 } from 'mongodb'
 
+export type Cursor = ChangeStream | AggregationCursor
 export type JSONSchema = Record<string, any>
 
 export type ProcessRecord = (doc: ChangeStreamDocument) => void | Promise<void>

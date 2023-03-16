@@ -1,7 +1,7 @@
-import { Collection, ChangeStream, AggregationCursor } from 'mongodb'
+import { Collection } from 'mongodb'
 import _ from 'lodash/fp.js'
 import { Node, walkie } from 'obj-walker'
-import { JSONSchema } from './types'
+import { Cursor, JSONSchema } from './types'
 import _debug from 'debug'
 
 const debug = _debug('mongochangestream')
@@ -60,7 +60,7 @@ export function when<T, R>(condition: any, fn: (x: T) => R) {
 /**
  * Check if the cursor has next without throwing an exception.
  */
-export const safelyCheckNext = async (cursor: ChangeStream | AggregationCursor) => {
+export const safelyCheckNext = async (cursor: Cursor) => {
   debug('safelyCheckNext called')
   try {
     // Prevents hasNext from hanging when the cursor is already closed
