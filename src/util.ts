@@ -62,7 +62,7 @@ export function when<T, R>(condition: any, fn: (x: T) => R) {
  * TODO: Create new npm package for this.
  */
 export const safelyCheckNext = (cursor: Cursor) => {
-  let lastError: any
+  let lastError: unknown
 
   const hasNext = async () => {
     debug('safelyCheckNext called')
