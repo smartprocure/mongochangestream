@@ -166,6 +166,7 @@ test('initial scan should resume after stop', async () => {
   sync.emitter.on('initialScanComplete', () => {
     completed = true
   })
+  sync.emitter.on('hasNextError', console.log)
   // Start
   initialScan.start()
   // Allow for some records to be processed
@@ -188,6 +189,7 @@ test('initial scan should not be marked as completed if connection is closed', a
   const { coll, redis, client } = await getConns({})
   const sync = initSync(redis, coll)
   sync.emitter.on('stateChange', console.log)
+  sync.emitter.on('hasNextError', console.log)
   await initState(sync, coll)
 
   const processed = []
@@ -316,6 +318,38 @@ test('change stream should resume properly', async () => {
   await setTimeout(ms('10s'))
   // All change stream docs were processed
   assert.equal(processed.length, numDocs)
+  await changeStream.stop()
+})
+
+test('change stream handle missing oplog entry properly', async () => {
+  const { coll, redis } = await getConns()
+  const sync = await getSync()
+  let hasNextError: any
+  sync.emitter.on('hasNextError', ({ error }) => {
+    hasNextError = error
+  })
+
+  await initState(sync, coll)
+
+  // Set missing token key
+  await redis.set(
+    sync.keys.changeStreamTokenKey,
+    '{"_data":"8263F51B8F000000012B022C0100296E5A1004F852F6C89F924F0A8711460F0C1FBD8846645F6964006463F51B8FD1AACE003022EFC80004"}'
+  )
+
+  // Change stream
+  const processRecord = async () => {
+    await setTimeout(5)
+  }
+  const changeStream = await sync.processChangeStream(processRecord)
+  changeStream.start()
+  // Let change stream connect
+  await setTimeout(ms('1s'))
+
+  assert.equal(
+    hasNextError?.message,
+    'PlanExecutor error during aggregation :: caused by :: Resume of change stream was not possible, as the resume point may no longer be in the oplog.'
+  )
   await changeStream.stop()
 })
 
@@ -524,6 +558,7 @@ test('should fail health check - change stream', async () => {
     healthCheckFailed = true
     changeStream.stop()
   })
+  sync.emitter.on('hasNextError', console.log)
   // Start
   changeStream.start()
   await setTimeout(ms('1s'))

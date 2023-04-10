@@ -64,6 +64,7 @@ export interface ChangeOptions {
 // Events
 
 export type Events =
+  | 'hasNextError'
   | 'healthCheckFail'
   | 'resync'
   | 'schemaChange'
@@ -104,6 +105,11 @@ export interface StateChangeEvent {
 export interface InitialScanComplete {
   type: 'initialScanComplete'
   lastId: string
+}
+
+export interface HasNextError {
+  type: 'hasNextError'
+  lastId: Error | string
 }
 
 // State

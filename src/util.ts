@@ -59,18 +59,30 @@ export function when<T, R>(condition: any, fn: (x: T) => R) {
 
 /**
  * Check if the cursor has next without throwing an exception.
+ * TODO: Create new npm package for this.
  */
-export const safelyCheckNext = async (cursor: Cursor) => {
-  debug('safelyCheckNext called')
-  try {
-    // Prevents hasNext from hanging when the cursor is already closed
-    if (cursor.closed) {
-      debug('safelyCheckNext cursor closed')
+export const safelyCheckNext = (cursor: Cursor) => {
+  let lastError: any
+
+  const hasNext = async () => {
+    debug('safelyCheckNext called')
+    try {
+      // Prevents hasNext from hanging when the cursor is already closed
+      if (cursor.closed) {
+        debug('safelyCheckNext cursor closed')
+        lastError = 'cursor closed'
+        return false
+      }
+      return await cursor.hasNext()
+    } catch (e) {
+      debug('safelyCheckNext error: %o', e)
+      lastError = e
       return false
     }
-    return await cursor.hasNext()
-  } catch (e) {
-    debug('safelyCheckNext error: %o', e)
-    return false
   }
+
+  const errorExists = () => Boolean(lastError)
+  const getLastError = () => ({ error: lastError })
+
+  return { hasNext, errorExists, getLastError }
 }

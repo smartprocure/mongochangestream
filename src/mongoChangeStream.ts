@@ -311,8 +311,9 @@ export const initSync = (
       debug('Last id inserted %s', lastIdInserted)
 
       const ns = { db: collection.dbName, coll: collection.collectionName }
+      const nextChecker = safelyCheckNext(cursor)
       // Process documents
-      while (await safelyCheckNext(cursor)) {
+      while (await nextChecker.hasNext()) {
         const doc = await cursor.next()
         debug('Initial scan doc %O', doc)
         // Doc can be null if cursor is closed
@@ -327,6 +328,10 @@ export const initSync = (
       }
       // Flush the queue
       await queue.flush()
+      // Emit hasNext error
+      if (nextChecker.errorExists()) {
+        emit('hasNextError', nextChecker.getLastError())
+      }
       // Final id processed
       const finalIdProcessed = await redis.get(keys.lastScanIdKey)
       debug('Final id processed %s', finalIdProcessed)
@@ -494,8 +499,9 @@ export const initSync = (
       if (options.healthCheck?.enabled) {
         healthCheck.start()
       }
+      const nextChecker = safelyCheckNext(changeStream)
       // Consume change stream
-      while (await safelyCheckNext(changeStream)) {
+      while (await nextChecker.hasNext()) {
         let event = await changeStream.next()
         debug('Change stream event %O', event)
         // Get resume token
@@ -515,6 +521,10 @@ export const initSync = (
           keys.lastChangeProcessedAtKey,
           new Date().getTime()
         )
+      }
+      // Emit hasNext error
+      if (nextChecker.errorExists()) {
+        emit('hasNextError', nextChecker.getLastError())
       }
       deferred.done()
       debug('Exit change stream')
