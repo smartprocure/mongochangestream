@@ -109,7 +109,7 @@ export interface InitialScanComplete {
 
 export interface HasNextError {
   type: 'hasNextError'
-  lastId: Error | string
+  error: Error | string
 }
 
 // State
