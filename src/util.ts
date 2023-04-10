@@ -70,7 +70,7 @@ export const safelyCheckNext = (cursor: Cursor) => {
       // Prevents hasNext from hanging when the cursor is already closed
       if (cursor.closed) {
         debug('safelyCheckNext cursor closed')
-        lastError = 'cursor closed'
+        lastError = new Error('cursor closed')
         return false
       }
       return await cursor.hasNext()
