@@ -167,7 +167,7 @@ test('initial scan should resume after stop', async () => {
   sync.emitter.on('initialScanComplete', () => {
     completed = true
   })
-  sync.emitter.on('hasNextError', console.log)
+  sync.emitter.on('cursorError', console.log)
   // Start
   initialScan.start()
   // Allow for some records to be processed
@@ -190,7 +190,7 @@ test('initial scan should not be marked as completed if connection is closed', a
   const { coll, redis, client } = await getConns({})
   const sync = initSync(redis, coll)
   sync.emitter.on('stateChange', console.log)
-  sync.emitter.on('hasNextError', console.log)
+  sync.emitter.on('cursorError', console.log)
   await initState(sync, coll)
 
   const processed = []
@@ -325,9 +325,9 @@ test('change stream should resume properly', async () => {
 test('change stream handle missing oplog entry properly', async () => {
   const { coll, redis } = await getConns()
   const sync = await getSync()
-  let hasNextError: any
+  let cursorError: any
   sync.emitter.on('cursorError', ({ error }) => {
-    hasNextError = error
+    cursorError = error
   })
 
   await initState(sync, coll)
@@ -347,7 +347,7 @@ test('change stream handle missing oplog entry properly', async () => {
   // Let change stream connect
   await setTimeout(ms('1s'))
 
-  assert.ok(missingOplogEntry(hasNextError?.message))
+  assert.ok(missingOplogEntry(cursorError?.message))
   await changeStream.stop()
 })
 
@@ -556,7 +556,7 @@ test('should fail health check - change stream', async () => {
     healthCheckFailed = true
     changeStream.stop()
   })
-  sync.emitter.on('hasNextError', console.log)
+  sync.emitter.on('cursorError', console.log)
   // Start
   changeStream.start()
   await setTimeout(ms('1s'))
