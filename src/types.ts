@@ -64,7 +64,7 @@ export interface ChangeOptions {
 // Events
 
 export type Events =
-  | 'hasNextError'
+  | 'cursorError'
   | 'healthCheckFail'
   | 'resync'
   | 'schemaChange'
@@ -107,8 +107,8 @@ export interface InitialScanComplete {
   lastId: string
 }
 
-export interface HasNextError {
-  type: 'hasNextError'
+export interface CursorError {
+  type: 'cursorError'
   error: unknown
 }
 

@@ -24,6 +24,7 @@ import { faker } from '@faker-js/faker'
 import ms from 'ms'
 import { setTimeout } from 'node:timers/promises'
 import { QueueOptions } from 'prom-utils'
+import { missingOplogEntry } from './util.js'
 
 const getConns = _.memoize(async (x?: any) => {
   console.log(x)
@@ -325,7 +326,7 @@ test('change stream handle missing oplog entry properly', async () => {
   const { coll, redis } = await getConns()
   const sync = await getSync()
   let hasNextError: any
-  sync.emitter.on('hasNextError', ({ error }) => {
+  sync.emitter.on('cursorError', ({ error }) => {
     hasNextError = error
   })
 
@@ -346,10 +347,7 @@ test('change stream handle missing oplog entry properly', async () => {
   // Let change stream connect
   await setTimeout(ms('1s'))
 
-  assert.equal(
-    hasNextError?.message,
-    'PlanExecutor error during aggregation :: caused by :: Resume of change stream was not possible, as the resume point may no longer be in the oplog.'
-  )
+  assert.ok(missingOplogEntry(hasNextError?.message))
   await changeStream.stop()
 })
 

@@ -328,9 +328,9 @@ export const initSync = (
       }
       // Flush the queue
       await queue.flush()
-      // Emit hasNext error
+      // Emit
       if (nextChecker.errorExists()) {
-        emit('hasNextError', nextChecker.getLastError())
+        emit('cursorError', nextChecker.getLastError())
       }
       // Final id processed
       const finalIdProcessed = await redis.get(keys.lastScanIdKey)
@@ -522,9 +522,9 @@ export const initSync = (
           new Date().getTime()
         )
       }
-      // Emit hasNext error
+      // Emit
       if (nextChecker.errorExists()) {
-        emit('hasNextError', nextChecker.getLastError())
+        emit('cursorError', nextChecker.getLastError())
       }
       deferred.done()
       debug('Exit change stream')

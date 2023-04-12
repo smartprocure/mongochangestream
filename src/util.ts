@@ -59,7 +59,7 @@ export function when<T, R>(condition: any, fn: (x: T) => R) {
 
 /**
  * Check if the cursor has next without throwing an exception.
- * TODO: Create new npm package for this.
+ * Get the last error safely via `getLastError`.
  */
 export const safelyCheckNext = (cursor: Cursor) => {
   let lastError: unknown
@@ -86,3 +86,9 @@ export const safelyCheckNext = (cursor: Cursor) => {
 
   return { hasNext, errorExists, getLastError }
 }
+
+/**
+ * Check if error message indicates a missing oplog entry.
+ */
+export const missingOplogEntry = (x: string) =>
+  x.includes('resume point may no longer be in the oplog')
