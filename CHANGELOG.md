@@ -2,6 +2,7 @@
 
 - Emit `cursorError` when an error occurs when calling `hasNext`. Useful for debugging
   syncing issues like a missing oplog entry caused by an inadequate oplog window.
+- `missingOplogEntry` utility function.
 
 # 0.36.0
 
