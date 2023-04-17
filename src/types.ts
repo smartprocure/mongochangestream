@@ -44,11 +44,7 @@ export interface ScanOptions<T = any> {
 export interface ChangeStreamOptions {
   healthCheck?: {
     enabled: boolean
-    /** The date field that contains the time the record was last updated */
-    field: string
-    /** How often to run the health check. */
-    interval?: number
-    /** The max allowed time for a modified record to be synced */
+    /** The max allowed sync delay in ms. */
     maxSyncDelay?: number
   }
   pipeline?: Document[]

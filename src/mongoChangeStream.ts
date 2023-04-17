@@ -1,4 +1,5 @@
 import _ from 'lodash/fp.js'
+import { throttle } from 'lodash'
 import {
   ChangeStreamInsertDocument,
   Collection,
@@ -83,6 +84,7 @@ export const initSync = (
 ) => {
   const keys = getKeys(collection)
   const { omit } = options
+  // TODO: Switch to Emittery
   const emitter = new EventEmitter()
   const emit = (event: Events, data: object) => {
     emitter.emit(event, { type: event, ...data })
@@ -135,22 +137,6 @@ export const initSync = (
         return parseInt(x, 10)
       }
     })
-
-  /**
-   * Get the timestamp of the last record updated. Assumes the field is a date.
-   */
-  const getLastRecordUpdatedAt = (field: string): Promise<number | undefined> =>
-    collection
-      .find({})
-      .sort({ [field]: -1 })
-      .project({ [field]: 1 })
-      .limit(1)
-      .toArray()
-      .then((x) => {
-        if (x.length) {
-          return x[0][field]?.getTime()
-        }
-      })
 
   async function runInitialScan<T = any>(
     processRecords: ProcessRecords,
@@ -402,67 +388,6 @@ export const initSync = (
     })
     const defaultOptions = { fullDocument: 'updateLookup' }
 
-    /**
-     * Periodically check that change stream events are being processed.
-     * Only applies to records inserted into the collection.
-     */
-    const healthChecker = () => {
-      const {
-        field,
-        interval = ms('1m'),
-        maxSyncDelay = ms('5m'),
-      } = options.healthCheck || {}
-      let timer: NodeJS.Timer
-      const state = fsm(simpleStateTransistions, 'stopped', {
-        name: 'Change stream health check',
-        onStateChange: emitStateChange,
-      })
-
-      const runHealthCheck = async () => {
-        debug('Checking health - change stream')
-        const [lastSyncedAt, lastRecordUpdatedAt] = await Promise.all([
-          getLastSyncedAt(keys.lastChangeProcessedAtKey),
-          // Typescript hack
-          getLastRecordUpdatedAt(field as string),
-        ])
-        debug('Last change processed at %d', lastSyncedAt)
-        debug('Last record created at %d', lastRecordUpdatedAt)
-        // A record was updated but not synced within maxSyncDelay of being updated
-        if (
-          !state.is('stopped') &&
-          lastRecordUpdatedAt &&
-          lastSyncedAt &&
-          lastRecordUpdatedAt - lastSyncedAt > maxSyncDelay
-        ) {
-          debug('Health check failed - change stream')
-          emit('healthCheckFail', {
-            failureType: 'changeStream',
-            lastRecordUpdatedAt,
-            lastSyncedAt,
-          })
-        }
-      }
-      const start = () => {
-        debug('Starting health check - change stream')
-        if (state.is('started')) {
-          return
-        }
-        timer = setInterval(runHealthCheck, interval)
-        state.change('started')
-      }
-      const stop = () => {
-        debug('Stopping health check - change stream')
-        if (state.is('stopped')) {
-          return
-        }
-        clearInterval(timer)
-        state.change('stopped')
-      }
-      return { start, stop }
-    }
-
-    const healthCheck = healthChecker()
-
     const getChangeStream = async () => {
       const omitPipeline = omit ? generatePipelineFromOmit(omit) : []
       const extendedPipeline = options.pipeline ?? []
@@ -475,6 +400,21 @@ export const initSync = (
           { ...defaultOptions, resumeAfter: JSON.parse(token) }
         : defaultOptions
       return collection.watch(pipeline, changeStreamOptions)
+    }
+
+    const runHealthCheck = async (eventReceivedAt: number) => {
+      debug('Checking health - change stream')
+      const lastSyncedAt = await getLastSyncedAt(keys.lastChangeProcessedAtKey)
+      debug('Last change processed at %d', lastSyncedAt)
+      // Change stream event not synced
+      if (lastSyncedAt && lastSyncedAt < eventReceivedAt) {
+        debug('Health check failed - change stream')
+        emit('healthCheckFail', {
+          failureType: 'changeStream',
+          eventReceived: eventReceivedAt,
+          lastSyncedAt,
+        })
+      }
     }
 
     /** Start processing change stream */
@@ -495,15 +435,19 @@ export const initSync = (
       // Start the change stream
       changeStream = await getChangeStream()
       state.change('started')
-      // Start the health check
-      if (options.healthCheck?.enabled) {
-        healthCheck.start()
-      }
       const nextChecker = safelyCheckNext(changeStream)
       // Consume change stream
       while (await nextChecker.hasNext()) {
         let event = await changeStream.next()
         debug('Change stream event %O', event)
+        if (options.healthCheck?.enabled) {
+          throttle(() => {
+            setTimeout(
+              () => runHealthCheck(new Date().getTime()),
+              options.healthCheck?.maxSyncDelay
+            )
+          }, options.healthCheck?.maxSyncDelay)
+        }
         // Get resume token
         const token = event?._id
         debug('token %o', token)
@@ -543,8 +487,6 @@ export const initSync = (
         await state.waitForChange('started')
       }
       state.change('stopping')
-      // Stop the health check
-      healthCheck.stop()
       // Close the change stream
       await changeStream?.close()
       debug('MongoDB change stream closed')
