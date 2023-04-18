@@ -9,8 +9,8 @@ import {
   JSONSchema,
   SchemaChangeEvent,
   ScanOptions,
-  ChangeStreamOptions,
   SyncOptions,
+  ChangeStreamOptions,
 } from './types.js'
 import {
   Document,
@@ -545,11 +545,11 @@ test('should fail health check - change stream', async () => {
   let healthCheckFailed = false
   const processed = []
   const processRecord = async (doc: ChangeStreamDocument) => {
-    await setTimeout(5)
+    await setTimeout(ms('2s'))
     processed.push(doc)
   }
   const options: ChangeStreamOptions = {
-    healthCheck: { enabled: true, field: 'createdAt', interval: ms('1s') },
+    healthCheck: { enabled: true, maxSyncDelay: ms('1s') },
   }
   const changeStream = await sync.processChangeStream(processRecord, options)
   sync.emitter.on('healthCheckFail', () => {
@@ -562,10 +562,8 @@ test('should fail health check - change stream', async () => {
   await setTimeout(ms('1s'))
   // Update records
   await coll.updateOne({}, { $set: { name: 'Tom' } })
-  // Simulate failure
-  await coll.updateOne({}, { $set: { createdAt: new Date('2050-01-01') } })
   // Wait for health checker to pick up failure
-  await setTimeout(ms('1s'))
+  await setTimeout(ms('2s'))
   assert.ok(healthCheckFailed)
   assert.notEqual(processed.length, numDocs)
   // Stop

@@ -44,7 +44,7 @@ export interface ScanOptions<T = any> {
 export interface ChangeStreamOptions {
   healthCheck?: {
     enabled: boolean
-    /** The max allowed sync delay in ms. */
+    /** The max allowed time for a change stream event to be processed. */
     maxSyncDelay?: number
   }
   pipeline?: Document[]

@@ -92,3 +92,28 @@ export const safelyCheckNext = (cursor: Cursor) => {
  */
 export const missingOplogEntry = (x: string) =>
   x.includes('resume point may no longer be in the oplog')
+
+/**
+ * Schedule a function to be called. If a previous invocation has
+ * not completed subsequent calls to schedule will be skipped.
+ */
+export const delayed = (fn: (...args: any[]) => void, ms: number) => {
+  let timeoutId: NodeJS.Timeout
+  let scheduled = false
+
+  const call = (...args: any[]) => {
+    if (!scheduled) {
+      scheduled = true
+      timeoutId = setTimeout(() => {
+        fn(...args)
+        scheduled = false
+      }, ms)
+    }
+  }
+  call.cancel = () => {
+    clearTimeout(timeoutId)
+    scheduled = false
+  }
+
+  return call
+}

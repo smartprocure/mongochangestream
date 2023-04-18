@@ -1,5 +1,4 @@
 import _ from 'lodash/fp.js'
-import { throttle } from 'lodash'
 import {
   ChangeStreamInsertDocument,
   Collection,
@@ -32,6 +31,7 @@ import {
   safelyCheckNext,
   setDefaults,
   when,
+  delayed,
 } from './util.js'
 import EventEmitter from 'eventemitter3'
 import ms from 'ms'
@@ -388,6 +388,13 @@ export const initSync = (
     })
     const defaultOptions = { fullDocument: 'updateLookup' }
 
+    const healthCheck = {
+      enabled: false,
+      maxSyncDelay: ms('5m'),
+      interval: ms('1m'),
+      ...options.healthCheck,
+    }
+
     const getChangeStream = async () => {
       const omitPipeline = omit ? generatePipelineFromOmit(omit) : []
       const extendedPipeline = options.pipeline ?? []
@@ -405,17 +412,20 @@ export const initSync = (
     const runHealthCheck = async (eventReceivedAt: number) => {
       debug('Checking health - change stream')
       const lastSyncedAt = await getLastSyncedAt(keys.lastChangeProcessedAtKey)
+      debug('Event received at %d', eventReceivedAt)
       debug('Last change processed at %d', lastSyncedAt)
       // Change stream event not synced
-      if (lastSyncedAt && lastSyncedAt < eventReceivedAt) {
+      if (!lastSyncedAt || lastSyncedAt < eventReceivedAt) {
         debug('Health check failed - change stream')
         emit('healthCheckFail', {
           failureType: 'changeStream',
-          eventReceived: eventReceivedAt,
+          eventReceivedAt,
           lastSyncedAt,
         })
       }
     }
+
+    const healthChecker = delayed(runHealthCheck, healthCheck.maxSyncDelay)
 
     /** Start processing change stream */
     const start = async () => {
@@ -438,16 +448,12 @@ export const initSync = (
       const nextChecker = safelyCheckNext(changeStream)
       // Consume change stream
       while (await nextChecker.hasNext()) {
+        // Schedule health check
+        if (healthCheck.enabled) {
+          healthChecker(new Date().getTime())
+        }
         let event = await changeStream.next()
         debug('Change stream event %O', event)
-        if (options.healthCheck?.enabled) {
-          throttle(() => {
-            setTimeout(
-              () => runHealthCheck(new Date().getTime()),
-              options.healthCheck?.maxSyncDelay
-            )
-          }, options.healthCheck?.maxSyncDelay)
-        }
         // Get resume token
         const token = event?._id
         debug('token %o', token)
@@ -458,7 +464,7 @@ export const initSync = (
         }
         // Process record
         await processRecord(event)
-        // Update change stream token
+
         await redis.mset(
           keys.changeStreamTokenKey,
           JSON.stringify(token),
@@ -487,6 +493,8 @@ export const initSync = (
         await state.waitForChange('started')
       }
       state.change('stopping')
+      // Cancel health check
+      healthChecker.cancel()
       // Close the change stream
       await changeStream?.close()
       debug('MongoDB change stream closed')
