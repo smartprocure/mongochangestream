@@ -94,26 +94,38 @@ export const missingOplogEntry = (x: string) =>
   x.includes('resume point may no longer be in the oplog')
 
 /**
- * Schedule a function to be called. If a previous invocation has
- * not completed subsequent calls to schedule will be skipped.
+ * Creates a delayed function that only invokes fn at most once every ms.
+ * The first invocation will be the one that gets executed. Subsequent calls
+ * to the delayed function will be dropped if there is a pending invocation.
+ *
+ * The delayed function comes with a cancel method to cancel the delayed fn
+ * invocation and a flush method to immediately invoke it.
  */
 export const delayed = (fn: (...args: any[]) => void, ms: number) => {
   let timeoutId: NodeJS.Timeout
   let scheduled = false
+  let callback: () => void
 
-  const call = (...args: any[]) => {
+  const delayedFn = (...args: any[]) => {
     if (!scheduled) {
       scheduled = true
-      timeoutId = setTimeout(() => {
+      callback = () => {
         fn(...args)
         scheduled = false
-      }, ms)
+      }
+      timeoutId = setTimeout(callback, ms)
     }
   }
-  call.cancel = () => {
+  delayedFn.cancel = () => {
     clearTimeout(timeoutId)
     scheduled = false
   }
+  delayedFn.flush = () => {
+    if (scheduled) {
+      delayedFn.cancel()
+      callback()
+    }
+  }
 
-  return call
+  return delayedFn
 }
