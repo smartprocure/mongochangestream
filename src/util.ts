@@ -1,7 +1,7 @@
 import { Collection } from 'mongodb'
 import _ from 'lodash/fp.js'
 import { Node, walkie } from 'obj-walker'
-import { Cursor, JSONSchema } from './types'
+import { Cursor, JSONSchema } from './types.js'
 import _debug from 'debug'
 
 const debug = _debug('mongochangestream')

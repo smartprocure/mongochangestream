@@ -1,7 +1,7 @@
 /**
  * To run: MONGO_CONN="[conn string]" node dist/mongoChangeStream.test.js
  */
-import _ from 'lodash/fp'
+import _ from 'lodash/fp.js'
 import { test } from 'node:test'
 import assert from 'node:assert'
 import { initSync } from './mongoChangeStream.js'
@@ -27,6 +27,7 @@ import { QueueOptions } from 'prom-utils'
 import { missingOplogEntry } from './util.js'
 
 const getConns = _.memoize(async (x?: any) => {
+  // Memoize hack
   console.log(x)
   const redis = new Redis({ keyPrefix: 'testing:' })
   const client = await MongoClient.connect(process.env.MONGO_CONN as string)
@@ -76,7 +77,7 @@ const populateCollection = (collection: Collection, count = numDocs) => {
 }
 
 const initState = async (
-  sync: ReturnType<typeof initSync>,
+  sync: Awaited<ReturnType<typeof getSync>>,
   coll: Collection
 ) => {
   // Reset state
@@ -326,7 +327,7 @@ test('change stream handle missing oplog entry properly', async () => {
   const { coll, redis } = await getConns()
   const sync = await getSync()
   let cursorError: any
-  sync.emitter.on('cursorError', ({ error }) => {
+  sync.emitter.on('cursorError', ({ error }: any) => {
     cursorError = error
   })
 
@@ -568,4 +569,15 @@ test('should fail health check - change stream', async () => {
   assert.notEqual(processed.length, numDocs)
   // Stop
   await changeStream.stop()
+})
+
+test('can extend events', async () => {
+  const { coll, redis } = await getConns({})
+  const sync = initSync<'foo' | 'bar'>(redis, coll)
+  let emitted = ''
+  sync.emitter.on('foo', (x: string) => {
+    emitted = x
+  })
+  sync.emitter.emit('foo', 'bar')
+  assert.equal(emitted, 'bar')
 })

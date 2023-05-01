@@ -77,15 +77,14 @@ const simpleStateTransistions: StateTransitions<SimpleState> = {
   stopped: ['started'],
 }
 
-export const initSync = (
+export function initSync<ExtendedEvents extends EventEmitter.ValidEventTypes>(
   redis: Redis,
   collection: Collection,
   options: SyncOptions = {}
-) => {
+) {
   const keys = getKeys(collection)
   const { omit } = options
-  // TODO: Switch to Emittery
-  const emitter = new EventEmitter()
+  const emitter = new EventEmitter<Events | ExtendedEvents>()
   const emit = (event: Events, data: object) => {
     emitter.emit(event, { type: event, ...data })
   }

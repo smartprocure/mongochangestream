@@ -3,6 +3,11 @@
 - Emit `cursorError` when an error occurs when calling `hasNext`. Useful for debugging
   syncing issues like a missing oplog entry caused by an inadequate oplog window.
 - `missingOplogEntry` utility function.
+- Change stream health check behavior has changed. The `healthCheck.field` option has been
+  removed since determining a failed health check relies on a delayed check of a
+  Redis key and not a MongoDB query.
+- Type parameter to allow for extending the event emitter. Useful for downstream
+libraries like `mongo2mongo` and `mongo2elastic`.
 
 # 0.36.0
 

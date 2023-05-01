@@ -98,12 +98,12 @@ export interface StateChangeEvent {
   to: string
 }
 
-export interface InitialScanComplete {
+export interface InitialScanCompleteEvent {
   type: 'initialScanComplete'
   lastId: string
 }
 
-export interface CursorError {
+export interface CursorErrorEvent {
   type: 'cursorError'
   error: unknown
 }
