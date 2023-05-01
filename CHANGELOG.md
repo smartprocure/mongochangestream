@@ -6,7 +6,7 @@
 - Change stream health check behavior has changed. The `healthCheck.field` option has been
   removed since determining a failed health check relies on a delayed check of a
   Redis key and not a MongoDB query.
-- Type parameter to allow for extending the event emitter. Useful for downstream
+- Type parameter on `initSync` to allow for extending the event emitter. Useful for downstream
 libraries like `mongo2mongo` and `mongo2elastic`.
 
 # 0.36.0
