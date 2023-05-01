@@ -1,7 +1,7 @@
 /**
  * To run: MONGO_CONN="[conn string]" node dist/mongoChangeStream.test.js
  */
-import _ from 'lodash/fp'
+import _ from 'lodash/fp.js'
 import { test } from 'node:test'
 import assert from 'node:assert'
 import { initSync } from './mongoChangeStream.js'
@@ -9,8 +9,8 @@ import {
   JSONSchema,
   SchemaChangeEvent,
   ScanOptions,
-  ChangeStreamOptions,
   SyncOptions,
+  ChangeStreamOptions,
 } from './types.js'
 import {
   Document,
@@ -24,8 +24,10 @@ import { faker } from '@faker-js/faker'
 import ms from 'ms'
 import { setTimeout } from 'node:timers/promises'
 import { QueueOptions } from 'prom-utils'
+import { missingOplogEntry } from './util.js'
 
 const getConns = _.memoize(async (x?: any) => {
+  // Memoize hack
   console.log(x)
   const redis = new Redis({ keyPrefix: 'testing:' })
   const client = await MongoClient.connect(process.env.MONGO_CONN as string)
@@ -75,7 +77,7 @@ const populateCollection = (collection: Collection, count = numDocs) => {
 }
 
 const initState = async (
-  sync: ReturnType<typeof initSync>,
+  sync: Awaited<ReturnType<typeof getSync>>,
   coll: Collection
 ) => {
   // Reset state
@@ -166,6 +168,7 @@ test('initial scan should resume after stop', async () => {
   sync.emitter.on('initialScanComplete', () => {
     completed = true
   })
+  sync.emitter.on('cursorError', console.log)
   // Start
   initialScan.start()
   // Allow for some records to be processed
@@ -188,6 +191,7 @@ test('initial scan should not be marked as completed if connection is closed', a
   const { coll, redis, client } = await getConns({})
   const sync = initSync(redis, coll)
   sync.emitter.on('stateChange', console.log)
+  sync.emitter.on('cursorError', console.log)
   await initState(sync, coll)
 
   const processed = []
@@ -316,6 +320,35 @@ test('change stream should resume properly', async () => {
   await setTimeout(ms('10s'))
   // All change stream docs were processed
   assert.equal(processed.length, numDocs)
+  await changeStream.stop()
+})
+
+test('change stream handle missing oplog entry properly', async () => {
+  const { coll, redis } = await getConns()
+  const sync = await getSync()
+  let cursorError: any
+  sync.emitter.on('cursorError', ({ error }: any) => {
+    cursorError = error
+  })
+
+  await initState(sync, coll)
+
+  // Set missing token key
+  await redis.set(
+    sync.keys.changeStreamTokenKey,
+    '{"_data":"8263F51B8F000000012B022C0100296E5A1004F852F6C89F924F0A8711460F0C1FBD8846645F6964006463F51B8FD1AACE003022EFC80004"}'
+  )
+
+  // Change stream
+  const processRecord = async () => {
+    await setTimeout(5)
+  }
+  const changeStream = await sync.processChangeStream(processRecord)
+  changeStream.start()
+  // Let change stream connect
+  await setTimeout(ms('1s'))
+
+  assert.ok(missingOplogEntry(cursorError?.message))
   await changeStream.stop()
 })
 
@@ -513,28 +546,38 @@ test('should fail health check - change stream', async () => {
   let healthCheckFailed = false
   const processed = []
   const processRecord = async (doc: ChangeStreamDocument) => {
-    await setTimeout(5)
+    await setTimeout(ms('2s'))
     processed.push(doc)
   }
   const options: ChangeStreamOptions = {
-    healthCheck: { enabled: true, field: 'createdAt', interval: ms('1s') },
+    healthCheck: { enabled: true, maxSyncDelay: ms('1s') },
   }
   const changeStream = await sync.processChangeStream(processRecord, options)
   sync.emitter.on('healthCheckFail', () => {
     healthCheckFailed = true
     changeStream.stop()
   })
+  sync.emitter.on('cursorError', console.log)
   // Start
   changeStream.start()
   await setTimeout(ms('1s'))
   // Update records
   await coll.updateOne({}, { $set: { name: 'Tom' } })
-  // Simulate failure
-  await coll.updateOne({}, { $set: { createdAt: new Date('2050-01-01') } })
   // Wait for health checker to pick up failure
-  await setTimeout(ms('1s'))
+  await setTimeout(ms('2s'))
   assert.ok(healthCheckFailed)
   assert.notEqual(processed.length, numDocs)
   // Stop
   await changeStream.stop()
+})
+
+test('can extend events', async () => {
+  const { coll, redis } = await getConns({})
+  const sync = initSync<'foo' | 'bar'>(redis, coll)
+  let emitted = ''
+  sync.emitter.on('foo', (x: string) => {
+    emitted = x
+  })
+  sync.emitter.emit('foo', 'bar')
+  assert.equal(emitted, 'bar')
 })

@@ -105,11 +105,11 @@ currently implemented and maintained.
 Sync MongoDB to MongoDB
 [mongo2mongo](https://www.npmjs.com/package/mongo2mongo)
 
-Sync MongoDB to CrateDB
-[mongo2crate](https://www.npmjs.com/package/mongo2crate)
-
 Sync MongoDB to Elasticsearch
 [mongo2elastic](https://www.npmjs.com/package/mongo2elastic)
+
+Sync MongoDB to CrateDB
+[mongo2crate](https://www.npmjs.com/package/mongo2crate)
 
 ## Resilience
 

@@ -1,7 +1,7 @@
 import { Collection } from 'mongodb'
 import _ from 'lodash/fp.js'
 import { Node, walkie } from 'obj-walker'
-import { Cursor, JSONSchema } from './types'
+import { Cursor, JSONSchema } from './types.js'
 import _debug from 'debug'
 
 const debug = _debug('mongochangestream')
@@ -59,18 +59,73 @@ export function when<T, R>(condition: any, fn: (x: T) => R) {
 
 /**
  * Check if the cursor has next without throwing an exception.
+ * Get the last error safely via `getLastError`.
  */
-export const safelyCheckNext = async (cursor: Cursor) => {
-  debug('safelyCheckNext called')
-  try {
-    // Prevents hasNext from hanging when the cursor is already closed
-    if (cursor.closed) {
-      debug('safelyCheckNext cursor closed')
+export const safelyCheckNext = (cursor: Cursor) => {
+  let lastError: unknown
+
+  const hasNext = async () => {
+    debug('safelyCheckNext called')
+    try {
+      // Prevents hasNext from hanging when the cursor is already closed
+      if (cursor.closed) {
+        debug('safelyCheckNext cursor closed')
+        lastError = new Error('cursor closed')
+        return false
+      }
+      return await cursor.hasNext()
+    } catch (e) {
+      debug('safelyCheckNext error: %o', e)
+      lastError = e
       return false
     }
-    return await cursor.hasNext()
-  } catch (e) {
-    debug('safelyCheckNext error: %o', e)
-    return false
   }
+
+  const errorExists = () => Boolean(lastError)
+  const getLastError = () => ({ error: lastError })
+
+  return { hasNext, errorExists, getLastError }
+}
+
+/**
+ * Check if error message indicates a missing oplog entry.
+ */
+export const missingOplogEntry = (x: string) =>
+  x.includes('resume point may no longer be in the oplog')
+
+/**
+ * Creates a delayed function that only invokes fn at most once every ms.
+ * The first invocation will be the one that gets executed. Subsequent calls
+ * to the delayed function will be dropped if there is a pending invocation.
+ *
+ * The delayed function comes with a cancel method to cancel the delayed fn
+ * invocation and a flush method to immediately invoke it.
+ */
+export const delayed = (fn: (...args: any[]) => void, ms: number) => {
+  let timeoutId: NodeJS.Timeout
+  let scheduled = false
+  let callback: () => void
+
+  const delayedFn = (...args: any[]) => {
+    if (!scheduled) {
+      scheduled = true
+      callback = () => {
+        fn(...args)
+        scheduled = false
+      }
+      timeoutId = setTimeout(callback, ms)
+    }
+  }
+  delayedFn.cancel = () => {
+    clearTimeout(timeoutId)
+    scheduled = false
+  }
+  delayedFn.flush = () => {
+    if (scheduled) {
+      delayedFn.cancel()
+      callback()
+    }
+  }
+
+  return delayedFn
 }
