@@ -259,8 +259,7 @@ export function initSync<ExtendedEvents extends EventEmitter.ValidEventTypes>(
       if (scanCompleted) {
         debug(`Initial scan previously completed on %s`, scanCompleted)
         // We're done
-        deferred.done()
-        state.change('started')
+        state.change('stopped')
         return
       }
       // Start the health check
