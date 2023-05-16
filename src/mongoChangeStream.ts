@@ -151,6 +151,7 @@ export function initSync<ExtendedEvents extends EventEmitter.ValidEventTypes>(
       field: '_id',
       serialize: _.toString,
       deserialize: (x: string) => new ObjectId(x),
+      ascendingDescending: 'ascending',
     }
 
     const sortField = options.sortField || defaultSortField
@@ -181,13 +182,20 @@ export function initSync<ExtendedEvents extends EventEmitter.ValidEventTypes>(
               {
                 $match: {
                   [sortField.field]: {
-                    $gt: sortField.deserialize(lastIdProcessed),
+                    [sortField.ascendingDescending === 'ascending'
+                      ? '$gt'
+                      : '$lt']: sortField.deserialize(lastIdProcessed),
                   },
                 },
               },
             ]
           : []),
-        { $sort: { [sortField.field]: 1 } },
+        {
+          $sort: {
+            [sortField.field]:
+              sortField.ascendingDescending === 'ascending' ? 1 : -1,
+          },
+        },
         ...omitPipeline,
         ...extendedPipeline,
       ]

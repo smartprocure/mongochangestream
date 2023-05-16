@@ -1,3 +1,7 @@
+# 0.37.1
+
+- added support for `ascendingDecending` on the sort SortField.
+
 # 0.37.0
 
 - Emit `cursorError` when an error occurs when calling `hasNext`. Useful for debugging
@@ -7,7 +11,7 @@
   removed since determining a failed health check relies on a delayed check of a
   Redis key and not a MongoDB query.
 - Type parameter on `initSync` to allow for extending the event emitter. Useful for downstream
-libraries like `mongo2mongo` and `mongo2elastic`.
+  libraries like `mongo2mongo` and `mongo2elastic`.
 
 # 0.36.0
 

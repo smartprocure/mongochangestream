@@ -27,6 +27,7 @@ export interface SortField<T> {
   /** Function to serialize value to string. */
   serialize: (x: T) => string
   deserialize: (x: string) => T
+  ascendingDescending?: 'ascending' | 'descending'
 }
 
 export interface ScanOptions<T = any> {
