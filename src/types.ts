@@ -106,7 +106,6 @@ export interface StateChangeEvent {
 
 export interface InitialScanCompleteEvent {
   type: 'initialScanComplete'
-  lastId: string
 }
 
 export interface CursorErrorEvent {
