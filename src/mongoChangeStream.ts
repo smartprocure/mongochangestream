@@ -382,7 +382,7 @@ export function initSync<ExtendedEvents extends EventEmitter.ValidEventTypes>(
     /**
      * Periodically check that change stream events are being processed.
      * Compares the time the last record update occurred to the time
-     * a change stream event was processed at. If that time exceeds
+     * the last change stream event was processed at. If that time exceeds
      * maxSyncDelay a healthCheckFail event is emitted.
      */
     const healthChecker = () => {
