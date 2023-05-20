@@ -1,3 +1,10 @@
+# 0.38.0
+
+- Revert change stream health to pre 0.37.0 where `field` is used to determine an
+  issue with change stream event processing.
+- Simplify some code.
+- Add support for sort order (asc, desc) on initial scan.
+
 # 0.37.0
 
 - Emit `cursorError` when an error occurs when calling `hasNext`. Useful for debugging
@@ -7,7 +14,7 @@
   removed since determining a failed health check relies on a delayed check of a
   Redis key and not a MongoDB query.
 - Type parameter on `initSync` to allow for extending the event emitter. Useful for downstream
-libraries like `mongo2mongo` and `mongo2elastic`.
+  libraries like `mongo2mongo` and `mongo2elastic`.
 
 # 0.36.0
 

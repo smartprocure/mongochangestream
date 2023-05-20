@@ -11,6 +11,7 @@ import {
   ScanOptions,
   SyncOptions,
   ChangeStreamOptions,
+  SortField,
 } from './types.js'
 import {
   Document,
@@ -18,6 +19,7 @@ import {
   ChangeStreamInsertDocument,
   MongoClient,
   Collection,
+  ObjectId,
 } from 'mongodb'
 import Redis from 'ioredis'
 import { faker } from '@faker-js/faker'
@@ -98,6 +100,31 @@ test('should complete initial scan', async () => {
     processed.push(...docs)
   }
   const scanOptions = { batchSize: 100 }
+  const initialScan = await sync.runInitialScan(processRecords, scanOptions)
+  // Wait for initial scan to complete
+  await initialScan.start()
+  assert.equal(processed.length, numDocs)
+  // Stop
+  await initialScan.stop()
+})
+
+test('should run initial scan in reverse sort order', async () => {
+  const { coll } = await getConns()
+  const sync = await getSync()
+  await initState(sync, coll)
+
+  const processed = []
+  const processRecords = async (docs: ChangeStreamInsertDocument[]) => {
+    await setTimeout(50)
+    processed.push(...docs)
+  }
+  const sortField: SortField<ObjectId> = {
+    field: '_id',
+    serialize: _.toString,
+    deserialize: (x: string) => new ObjectId(x),
+    order: 'desc',
+  }
+  const scanOptions = { batchSize: 100, sortField }
   const initialScan = await sync.runInitialScan(processRecords, scanOptions)
   // Wait for initial scan to complete
   await initialScan.start()
@@ -546,25 +573,27 @@ test('should fail health check - change stream', async () => {
   let healthCheckFailed = false
   const processed = []
   const processRecord = async (doc: ChangeStreamDocument) => {
-    await setTimeout(ms('2s'))
+    await setTimeout(5)
     processed.push(doc)
   }
   const options: ChangeStreamOptions = {
-    healthCheck: { enabled: true, maxSyncDelay: ms('1s') },
+    healthCheck: { enabled: true, field: 'createdAt', interval: ms('1s') },
   }
   const changeStream = await sync.processChangeStream(processRecord, options)
   sync.emitter.on('healthCheckFail', () => {
     healthCheckFailed = true
     changeStream.stop()
   })
-  sync.emitter.on('cursorError', console.log)
+  sync.emitter.on('hasNextError', console.log)
   // Start
   changeStream.start()
   await setTimeout(ms('1s'))
   // Update records
   await coll.updateOne({}, { $set: { name: 'Tom' } })
+  // Simulate failure
+  await coll.updateOne({}, { $set: { createdAt: new Date('2050-01-01') } })
   // Wait for health checker to pick up failure
-  await setTimeout(ms('2s'))
+  await setTimeout(ms('1s'))
   assert.ok(healthCheckFailed)
   assert.notEqual(processed.length, numDocs)
   // Stop

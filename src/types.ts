@@ -27,6 +27,8 @@ export interface SortField<T> {
   /** Function to serialize value to string. */
   serialize: (x: T) => string
   deserialize: (x: string) => T
+  /** Sort order: asc or desc. Defaults to asc */
+  order: 'asc' | 'desc'
 }
 
 export interface ScanOptions<T = any> {
@@ -44,7 +46,11 @@ export interface ScanOptions<T = any> {
 export interface ChangeStreamOptions {
   healthCheck?: {
     enabled: boolean
-    /** The max allowed time for a change stream event to be processed. */
+    /** The date field that contains the time the record was last updated */
+    field: string
+    /** How often to run the health check. */
+    interval?: number
+    /** The max allowed time for a modified record to be synced */
     maxSyncDelay?: number
   }
   pipeline?: Document[]

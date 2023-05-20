@@ -31,7 +31,6 @@ import {
   safelyCheckNext,
   setDefaults,
   when,
-  delayed,
 } from './util.js'
 import EventEmitter from 'eventemitter3'
 import ms from 'ms'
@@ -137,6 +136,22 @@ export function initSync<ExtendedEvents extends EventEmitter.ValidEventTypes>(
       }
     })
 
+  /**
+   * Get the timestamp of the last record updated. Assumes the field is a date.
+   */
+  const getLastRecordUpdatedAt = (field: string): Promise<number | undefined> =>
+    collection
+      .find({})
+      .sort({ [field]: -1 })
+      .project({ [field]: 1 })
+      .limit(1)
+      .toArray()
+      .then((x) => {
+        if (x.length) {
+          return x[0][field]?.getTime()
+        }
+      })
+
   async function runInitialScan<T = any>(
     processRecords: ProcessRecords,
     options: QueueOptions & ScanOptions<T> = {}
@@ -151,22 +166,12 @@ export function initSync<ExtendedEvents extends EventEmitter.ValidEventTypes>(
       field: '_id',
       serialize: _.toString,
       deserialize: (x: string) => new ObjectId(x),
+      order: 'asc',
     }
 
     const sortField = options.sortField || defaultSortField
 
-    /** Get the last id inserted */
-    const getLastIdInserted = () =>
-      collection
-        .find()
-        .project({ [sortField.field]: 1 })
-        .sort({ [sortField.field]: -1 })
-        .limit(1)
-        .toArray()
-        .then((x) => {
-          return x[0]?.[sortField.field]
-        })
-
+    const sortOrderToNum = { asc: 1, desc: -1 }
     const getCursor = async () => {
       // Lookup last id successfully processed
       const lastIdProcessed = await redis.get(keys.lastScanIdKey)
@@ -187,7 +192,7 @@ export function initSync<ExtendedEvents extends EventEmitter.ValidEventTypes>(
               },
             ]
           : []),
-        { $sort: { [sortField.field]: 1 } },
+        { $sort: { [sortField.field]: sortOrderToNum[sortField.order] } },
         ...omitPipeline,
         ...extendedPipeline,
       ]
@@ -213,7 +218,7 @@ export function initSync<ExtendedEvents extends EventEmitter.ValidEventTypes>(
         const lastSyncedAt = await getLastSyncedAt(keys.lastScanProcessedAtKey)
         debug('Last scan processed at %d', lastSyncedAt)
         // Records were not synced within the health check window
-        if (!withinHealthCheck(lastSyncedAt) && !state.is('stopped')) {
+        if (!state.is('stopped') && !withinHealthCheck(lastSyncedAt)) {
           debug('Health check failed - initial scan')
           emit('healthCheckFail', { failureType: 'initialScan', lastSyncedAt })
         }
@@ -290,9 +295,6 @@ export function initSync<ExtendedEvents extends EventEmitter.ValidEventTypes>(
       cursor = await getCursor()
       // Change state
       state.change('started')
-      // Take a snapshot of the last id inserted into the collection
-      const lastIdInserted = await getLastIdInserted()
-      debug('Last id inserted %s', lastIdInserted)
 
       const ns = { db: collection.dbName, coll: collection.collectionName }
       const nextChecker = safelyCheckNext(cursor)
@@ -312,28 +314,19 @@ export function initSync<ExtendedEvents extends EventEmitter.ValidEventTypes>(
       }
       // Flush the queue
       await queue.flush()
-      // Emit
+      // An error occurred checking for next
       if (nextChecker.errorExists()) {
         emit('cursorError', nextChecker.getLastError())
       }
-      // Final id processed
-      const finalIdProcessed = await redis.get(keys.lastScanIdKey)
-      debug('Final id processed %s', finalIdProcessed)
-      // Did we complete the initial scan?
-      if (
-        // No records in the collection
-        !lastIdInserted ||
-        // Final id processed was at least the last id inserted as of start
-        (finalIdProcessed &&
-          sortField.deserialize(finalIdProcessed) >= lastIdInserted)
-      ) {
+      // We're all done
+      else {
         debug('Completed initial scan')
         // Stop the health check
         healthCheck.stop()
         // Record scan complete
         await redis.set(keys.scanCompletedKey, new Date().toString())
         // Emit event
-        emit('initialScanComplete', { lastId: finalIdProcessed })
+        emit('initialScanComplete', {})
       }
       // Resolve deferred
       deferred.done()
@@ -386,13 +379,73 @@ export function initSync<ExtendedEvents extends EventEmitter.ValidEventTypes>(
     })
     const defaultOptions = { fullDocument: 'updateLookup' }
 
-    const healthCheck = {
-      enabled: false,
-      maxSyncDelay: ms('5m'),
-      interval: ms('1m'),
-      ...options.healthCheck,
+    /**
+     * Periodically check that change stream events are being processed.
+     * Compares the time the last record update occurred to the time
+     * a change stream event was processed at. If that time exceeds
+     * maxSyncDelay a healthCheckFail event is emitted.
+     */
+    const healthChecker = () => {
+      const {
+        field,
+        interval = ms('1m'),
+        // This time needs to allow for a server restart and resumption
+        // of the change stream.
+        maxSyncDelay = ms('5m'),
+      } = options.healthCheck || {}
+      let timer: NodeJS.Timer
+      const state = fsm(simpleStateTransistions, 'stopped', {
+        name: 'Change stream health check',
+        onStateChange: emitStateChange,
+      })
+
+      const runHealthCheck = async () => {
+        debug('Checking health - change stream')
+        const [lastSyncedAt, lastRecordUpdatedAt] = await Promise.all([
+          getLastSyncedAt(keys.lastChangeProcessedAtKey),
+          // Typescript hack
+          getLastRecordUpdatedAt(field as string),
+        ])
+        debug('Last change processed at %d', lastSyncedAt)
+        debug('Last record updated at %d', lastRecordUpdatedAt)
+        const healthCheckFailed =
+          lastRecordUpdatedAt &&
+          lastSyncedAt &&
+          lastRecordUpdatedAt - lastSyncedAt > maxSyncDelay
+
+        if (!state.is('stopped') && healthCheckFailed) {
+          debug('Health check failed - change stream')
+          emit('healthCheckFail', {
+            failureType: 'changeStream',
+            lastRecordUpdatedAt,
+            lastSyncedAt,
+          })
+        }
+      }
+      const start = () => {
+        debug('Starting health check - change stream')
+        if (state.is('started')) {
+          return
+        }
+        timer = setInterval(runHealthCheck, interval)
+        state.change('started')
+      }
+      const stop = () => {
+        debug('Stopping health check - change stream')
+        if (state.is('stopped')) {
+          return
+        }
+        clearInterval(timer)
+        state.change('stopped')
+      }
+      return { start, stop }
     }
 
+    const healthCheck = healthChecker()
+
+    /**
+     * Get the change stream, resuming from a previous token if exists.
+     */
     const getChangeStream = async () => {
       const omitPipeline = omit ? generatePipelineFromOmit(omit) : []
       const extendedPipeline = options.pipeline ?? []
@@ -406,24 +459,6 @@ export function initSync<ExtendedEvents extends EventEmitter.ValidEventTypes>(
         : defaultOptions
       return collection.watch(pipeline, changeStreamOptions)
     }
-
-    const runHealthCheck = async (eventReceivedAt: number) => {
-      debug('Checking health - change stream')
-      const lastSyncedAt = await getLastSyncedAt(keys.lastChangeProcessedAtKey)
-      debug('Event received at %d', eventReceivedAt)
-      debug('Last change processed at %d', lastSyncedAt)
-      // Change stream event not synced
-      if (!lastSyncedAt || lastSyncedAt < eventReceivedAt) {
-        debug('Health check failed - change stream')
-        emit('healthCheckFail', {
-          failureType: 'changeStream',
-          eventReceivedAt,
-          lastSyncedAt,
-        })
-      }
-    }
-
-    const healthChecker = delayed(runHealthCheck, healthCheck.maxSyncDelay)
 
     /** Start processing change stream */
     const start = async () => {
@@ -443,13 +478,13 @@ export function initSync<ExtendedEvents extends EventEmitter.ValidEventTypes>(
       // Start the change stream
       changeStream = await getChangeStream()
       state.change('started')
+      // Start the health check
+      if (options.healthCheck?.enabled) {
+        healthCheck.start()
+      }
       const nextChecker = safelyCheckNext(changeStream)
       // Consume change stream
       while (await nextChecker.hasNext()) {
-        // Schedule health check
-        if (healthCheck.enabled) {
-          healthChecker(new Date().getTime())
-        }
         let event = await changeStream.next()
         debug('Change stream event %O', event)
         // Get resume token
@@ -491,8 +526,8 @@ export function initSync<ExtendedEvents extends EventEmitter.ValidEventTypes>(
         await state.waitForChange('started')
       }
       state.change('stopping')
-      // Cancel health check
-      healthChecker.cancel()
+      // Stop the health check
+      healthCheck.stop()
       // Close the change stream
       await changeStream?.close()
       debug('MongoDB change stream closed')

@@ -1,6 +1,6 @@
 {
   "name": "mongochangestream",
-  "version": "0.37.0",
+  "version": "0.38.0",
   "description": "Sync MongoDB collections via change streams into any database.",
   "author": "GovSpend",
   "main": "dist/index.js",
@@ -27,7 +27,8 @@
     "elasticsearch",
     "sql",
     "cratedb",
-    "health"
+    "health",
+    "check"
   ],
   "license": "ISC",
   "engines": {
