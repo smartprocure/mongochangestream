@@ -32,11 +32,6 @@ export interface SortField<T> {
 }
 
 export interface ScanOptions<T = any> {
-  healthCheck?: {
-    enabled: boolean
-    /** How often to run the health check. */
-    interval?: number
-  }
   /** Defaults to _id */
   sortField?: SortField<T>
   /** Extend the pipeline. Be careful not to exclude the sort field or change the sort order. */
@@ -44,15 +39,6 @@ export interface ScanOptions<T = any> {
 }
 
 export interface ChangeStreamOptions {
-  healthCheck?: {
-    enabled: boolean
-    /** The date field that contains the time the record was last updated */
-    field: string
-    /** How often to run the health check. */
-    interval?: number
-    /** The max allowed time for a modified record to be synced */
-    maxSyncDelay?: number
-  }
   pipeline?: Document[]
 }
 
@@ -67,26 +53,10 @@ export interface ChangeOptions {
 
 export type Events =
   | 'cursorError'
-  | 'healthCheckFail'
   | 'resync'
   | 'schemaChange'
   | 'stateChange'
   | 'initialScanComplete'
-
-interface InitialScanFailEvent {
-  type: 'healthCheckFail'
-  failureType: 'initialScan'
-  lastSyncedAt: number
-}
-
-interface ChangeStreamFailEvent {
-  type: 'healthCheckFail'
-  failureType: 'changeStream'
-  lastRecordUpdatedAt: number
-  lastSyncedAt: number
-}
-
-export type HealthCheckFailEvent = InitialScanFailEvent | ChangeStreamFailEvent
 
 export interface ResyncEvent {
   type: 'resync'

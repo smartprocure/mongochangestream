@@ -1,7 +1,6 @@
 # 0.38.0
 
-- Revert change stream health to pre 0.37.0 where `field` is used to determine an
-  issue with change stream event processing.
+- Remove all health check code in favor of using the `cursorError` event.
 - Simplify some code.
 - Add support for sort order (asc, desc) on initial scan.
 

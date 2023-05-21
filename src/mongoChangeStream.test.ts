@@ -10,7 +10,6 @@ import {
   SchemaChangeEvent,
   ScanOptions,
   SyncOptions,
-  ChangeStreamOptions,
   SortField,
 } from './types.js'
 import {
@@ -214,7 +213,7 @@ test('initial scan should resume after stop', async () => {
 })
 
 test('initial scan should not be marked as completed if connection is closed', async () => {
-  // Memoize hack
+  // Get a new connection since we're closing the connection in the test
   const { coll, redis, client } = await getConns({})
   const sync = initSync(redis, coll)
   sync.emitter.on('stateChange', console.log)
@@ -536,70 +535,6 @@ test('Schema change start/stop is idempotent', async () => {
   schemaChange.stop()
 })
 
-test('should fail health check - initial scan', async () => {
-  const { coll } = await getConns()
-  const sync = await getSync()
-  await initState(sync, coll)
-
-  let healthCheckFailed = false
-  const processed = []
-  let counter = 0
-  const processRecords = async (docs: ChangeStreamInsertDocument[]) => {
-    await setTimeout(counter++ === 1 ? 1000 : 100)
-    processed.push(...docs)
-  }
-  const scanOptions: QueueOptions & ScanOptions = {
-    batchSize: 100,
-    healthCheck: { enabled: true, interval: 500 },
-  }
-  const initialScan = await sync.runInitialScan(processRecords, scanOptions)
-  sync.emitter.on('healthCheckFail', () => {
-    healthCheckFailed = true
-    initialScan.stop()
-  })
-  // Wait for initial scan to complete
-  await initialScan.start()
-  assert.ok(healthCheckFailed)
-  assert.notEqual(processed.length, numDocs)
-  // Stop
-  await initialScan.stop()
-})
-
-test('should fail health check - change stream', async () => {
-  const { coll } = await getConns()
-  const sync = await getSync()
-  await initState(sync, coll)
-
-  let healthCheckFailed = false
-  const processed = []
-  const processRecord = async (doc: ChangeStreamDocument) => {
-    await setTimeout(5)
-    processed.push(doc)
-  }
-  const options: ChangeStreamOptions = {
-    healthCheck: { enabled: true, field: 'createdAt', interval: ms('1s') },
-  }
-  const changeStream = await sync.processChangeStream(processRecord, options)
-  sync.emitter.on('healthCheckFail', () => {
-    healthCheckFailed = true
-    changeStream.stop()
-  })
-  sync.emitter.on('hasNextError', console.log)
-  // Start
-  changeStream.start()
-  await setTimeout(ms('1s'))
-  // Update records
-  await coll.updateOne({}, { $set: { name: 'Tom' } })
-  // Simulate failure
-  await coll.updateOne({}, { $set: { createdAt: new Date('2050-01-01') } })
-  // Wait for health checker to pick up failure
-  await setTimeout(ms('1s'))
-  assert.ok(healthCheckFailed)
-  assert.notEqual(processed.length, numDocs)
-  // Stop
-  await changeStream.stop()
-})
-
 test('can extend events', async () => {
   const { coll, redis } = await getConns({})
   const sync = initSync<'foo' | 'bar'>(redis, coll)
@@ -610,3 +545,30 @@ test('can extend events', async () => {
   sync.emitter.emit('foo', 'bar')
   assert.equal(emitted, 'bar')
 })
+
+test('should emit cursorError if change stream is closed', async () => {
+  // Get a new connection since we're closing the connection in the test
+  const { coll, client } = await getConns({})
+  const sync = await getSync()
+  sync.emitter.on('cursorError', ({ error }: any) => {
+    assert.ok(error?.message)
+  })
+  await initState(sync, coll)
+
+  const processed = []
+  const processRecord = async (doc: ChangeStreamDocument) => {
+    await setTimeout(5)
+    processed.push(doc)
+  }
+  const changeStream = await sync.processChangeStream(processRecord)
+  // Start
+  changeStream.start()
+  await setTimeout(ms('1s'))
+  // Update records
+  coll.updateMany({}, { $set: { createdAt: new Date('2022-01-01') } })
+  // Wait for the change stream events to be processed
+  await setTimeout(500)
+  // Close the connection.
+  await client.close()
+})
+
