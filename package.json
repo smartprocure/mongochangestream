@@ -26,9 +26,7 @@
     "db",
     "elasticsearch",
     "sql",
-    "cratedb",
-    "health",
-    "check"
+    "cratedb"
   ],
   "license": "ISC",
   "engines": {
