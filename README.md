@@ -127,8 +127,8 @@ will cleanly end processing.
 
 ### The MongoDB primary goes down and a new primary is elected
 
-In this scenario, you will need to enable health checks and restart the
-initial scan and/or change stream when a health check failure occurs.
+In this scenario, you will need to subscribe to the `cursorError` event and
+restart the process or handle otherwise.
 
 ## Change Stream Strategies
 
