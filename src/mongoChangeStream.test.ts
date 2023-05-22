@@ -571,4 +571,3 @@ test('should emit cursorError if change stream is closed', async () => {
   // Close the connection.
   await client.close()
 })
-
