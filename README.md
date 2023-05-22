@@ -93,7 +93,8 @@ const detectSchemaChange = async (db: Db, options: ChangeOptions = {})
 
 Look for the `cursorError` event and restart the process or resync as needed.
 See also the `missingOplogEntry` utility function that helps determine if an
-oplog entry is no longer present.
+oplog entry is no longer present and resumption of a change stream from a previous
+point is not possible.
 
 ## Companion Libraries
 
