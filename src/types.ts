@@ -80,7 +80,8 @@ export interface InitialScanCompleteEvent {
 
 export interface CursorErrorEvent {
   type: 'cursorError'
-  error: unknown
+  name: 'runInitialScan' | 'processChangeStream'
+  error: Error
 }
 
 // State

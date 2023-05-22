@@ -11,6 +11,7 @@ import {
   ScanOptions,
   SyncOptions,
   SortField,
+  CursorErrorEvent,
 } from './types.js'
 import {
   Document,
@@ -548,26 +549,26 @@ test('can extend events', async () => {
 
 test('should emit cursorError if change stream is closed', async () => {
   // Get a new connection since we're closing the connection in the test
-  const { coll, client } = await getConns({})
-  const sync = await getSync()
-  sync.emitter.on('cursorError', ({ error }: any) => {
-    assert.ok(error?.message)
+  const { redis, coll, client } = await getConns({})
+  const sync = initSync(redis, coll)
+  let error: any
+  sync.emitter.on('cursorError', (event: CursorErrorEvent) => {
+    console.log(event)
+    error = event.error
   })
   await initState(sync, coll)
 
-  const processed = []
-  const processRecord = async (doc: ChangeStreamDocument) => {
-    await setTimeout(5)
-    processed.push(doc)
+  const processRecord = async () => {
+    await setTimeout(500)
   }
   const changeStream = await sync.processChangeStream(processRecord)
   // Start
   changeStream.start()
   await setTimeout(ms('1s'))
   // Update records
-  coll.updateMany({}, { $set: { createdAt: new Date('2022-01-01') } })
-  // Wait for the change stream events to be processed
-  await setTimeout(500)
+  await coll.updateMany({}, { $set: { createdAt: new Date('2022-01-01') } })
   // Close the connection.
   await client.close()
+  await setTimeout(ms('3s'))
+  assert.ok(error?.message)
 })
