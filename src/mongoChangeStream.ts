@@ -358,7 +358,7 @@ export function initSync<ExtendedEvents extends EventEmitter.ValidEventTypes>(
         }
         // Process record
         await processRecord(event)
-
+        // Persist state
         await redis.mset(
           keys.changeStreamTokenKey,
           JSON.stringify(token),
