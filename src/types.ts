@@ -28,7 +28,7 @@ export interface SortField<T> {
   serialize: (x: T) => string
   deserialize: (x: string) => T
   /** Sort order: asc or desc. Defaults to asc */
-  order: 'asc' | 'desc'
+  order?: 'asc' | 'desc'
 }
 
 export interface ScanOptions<T = any> {

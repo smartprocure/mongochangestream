@@ -166,7 +166,11 @@ export function initSync<ExtendedEvents extends EventEmitter.ValidEventTypes>(
               },
             ]
           : []),
-        { $sort: { [sortField.field]: sortOrderToNum[sortField.order] } },
+        {
+          $sort: {
+            [sortField.field]: sortOrderToNum[sortField.order ?? 'asc'],
+          },
+        },
         ...omitPipeline,
         ...extendedPipeline,
       ]

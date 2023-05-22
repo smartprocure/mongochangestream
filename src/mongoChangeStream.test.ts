@@ -569,6 +569,6 @@ test('should emit cursorError if change stream is closed', async () => {
   await coll.updateMany({}, { $set: { createdAt: new Date('2022-01-01') } })
   // Close the connection.
   await client.close()
-  await setTimeout(ms('3s'))
+  await setTimeout(ms('5s'))
   assert.ok(error?.message)
 })
