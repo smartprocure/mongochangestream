@@ -82,7 +82,7 @@ export const safelyCheckNext = (cursor: Cursor) => {
   }
 
   const errorExists = () => Boolean(lastError)
-  const getLastError = () => ({ error: lastError })
+  const getLastError = () => lastError
 
   return { hasNext, errorExists, getLastError }
 }

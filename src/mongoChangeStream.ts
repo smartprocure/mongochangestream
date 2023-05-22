@@ -93,7 +93,7 @@ export function initSync<ExtendedEvents extends EventEmitter.ValidEventTypes>(
   const detectResync = (resyncCheckInterval = ms('1m')) => {
     let resyncTimer: NodeJS.Timer
     const state = fsm(simpleStateTransistions, 'stopped', {
-      name: 'Resync',
+      name: 'detectResync',
       onStateChange: emitStateChange,
     })
 
@@ -133,7 +133,7 @@ export function initSync<ExtendedEvents extends EventEmitter.ValidEventTypes>(
     let deferred: Deferred
     let cursor: ReturnType<typeof collection.aggregate>
     const state = fsm(stateTransitions, 'stopped', {
-      name: 'Initial scan',
+      name: 'runInitialScan',
       onStateChange: emitStateChange,
     })
     const defaultSortField: SortField<ObjectId> = {
@@ -242,7 +242,10 @@ export function initSync<ExtendedEvents extends EventEmitter.ValidEventTypes>(
       await queue.flush()
       // An error occurred checking for next
       if (nextChecker.errorExists()) {
-        emit('cursorError', nextChecker.getLastError())
+        emit('cursorError', {
+          name: 'runInitialScan',
+          error: nextChecker.getLastError(),
+        })
       }
       // We're all done
       else {
@@ -296,7 +299,7 @@ export function initSync<ExtendedEvents extends EventEmitter.ValidEventTypes>(
     let deferred: Deferred
     let changeStream: ChangeStream
     const state = fsm(stateTransitions, 'stopped', {
-      name: 'Change stream',
+      name: 'processChangeStream',
       onStateChange: emitStateChange,
     })
     const defaultOptions = { fullDocument: 'updateLookup' }
@@ -361,7 +364,10 @@ export function initSync<ExtendedEvents extends EventEmitter.ValidEventTypes>(
       }
       // Emit
       if (nextChecker.errorExists()) {
-        emit('cursorError', nextChecker.getLastError())
+        emit('cursorError', {
+          name: 'processChangeStream',
+          error: nextChecker.getLastError(),
+        })
       }
       deferred.done()
       debug('Exit change stream')
@@ -422,7 +428,7 @@ export function initSync<ExtendedEvents extends EventEmitter.ValidEventTypes>(
     const shouldRemoveMetadata = options.shouldRemoveMetadata
     const maybeRemoveMetadata = when(shouldRemoveMetadata, removeMetadata)
     const state = fsm(simpleStateTransistions, 'stopped', {
-      name: 'Schema change',
+      name: 'detectSchemaChange',
       onStateChange: emitStateChange,
     })
 
