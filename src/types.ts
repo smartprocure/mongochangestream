@@ -27,14 +27,11 @@ export interface SortField<T> {
   /** Function to serialize value to string. */
   serialize: (x: T) => string
   deserialize: (x: string) => T
+  /** Sort order: asc or desc. Defaults to asc */
+  order?: 'asc' | 'desc'
 }
 
 export interface ScanOptions<T = any> {
-  healthCheck?: {
-    enabled: boolean
-    /** How often to run the health check. */
-    interval?: number
-  }
   /** Defaults to _id */
   sortField?: SortField<T>
   /** Extend the pipeline. Be careful not to exclude the sort field or change the sort order. */
@@ -42,11 +39,6 @@ export interface ScanOptions<T = any> {
 }
 
 export interface ChangeStreamOptions {
-  healthCheck?: {
-    enabled: boolean
-    /** The max allowed time for a change stream event to be processed. */
-    maxSyncDelay?: number
-  }
   pipeline?: Document[]
 }
 
@@ -61,26 +53,10 @@ export interface ChangeOptions {
 
 export type Events =
   | 'cursorError'
-  | 'healthCheckFail'
   | 'resync'
   | 'schemaChange'
   | 'stateChange'
   | 'initialScanComplete'
-
-interface InitialScanFailEvent {
-  type: 'healthCheckFail'
-  failureType: 'initialScan'
-  lastSyncedAt: number
-}
-
-interface ChangeStreamFailEvent {
-  type: 'healthCheckFail'
-  failureType: 'changeStream'
-  lastRecordUpdatedAt: number
-  lastSyncedAt: number
-}
-
-export type HealthCheckFailEvent = InitialScanFailEvent | ChangeStreamFailEvent
 
 export interface ResyncEvent {
   type: 'resync'
@@ -100,12 +76,12 @@ export interface StateChangeEvent {
 
 export interface InitialScanCompleteEvent {
   type: 'initialScanComplete'
-  lastId: string
 }
 
 export interface CursorErrorEvent {
   type: 'cursorError'
-  error: unknown
+  name: 'runInitialScan' | 'processChangeStream'
+  error: Error
 }
 
 // State

@@ -10,7 +10,8 @@ import {
   SchemaChangeEvent,
   ScanOptions,
   SyncOptions,
-  ChangeStreamOptions,
+  SortField,
+  CursorErrorEvent,
 } from './types.js'
 import {
   Document,
@@ -18,6 +19,7 @@ import {
   ChangeStreamInsertDocument,
   MongoClient,
   Collection,
+  ObjectId,
 } from 'mongodb'
 import Redis from 'ioredis'
 import { faker } from '@faker-js/faker'
@@ -98,6 +100,31 @@ test('should complete initial scan', async () => {
     processed.push(...docs)
   }
   const scanOptions = { batchSize: 100 }
+  const initialScan = await sync.runInitialScan(processRecords, scanOptions)
+  // Wait for initial scan to complete
+  await initialScan.start()
+  assert.equal(processed.length, numDocs)
+  // Stop
+  await initialScan.stop()
+})
+
+test('should run initial scan in reverse sort order', async () => {
+  const { coll } = await getConns()
+  const sync = await getSync()
+  await initState(sync, coll)
+
+  const processed = []
+  const processRecords = async (docs: ChangeStreamInsertDocument[]) => {
+    await setTimeout(50)
+    processed.push(...docs)
+  }
+  const sortField: SortField<ObjectId> = {
+    field: '_id',
+    serialize: _.toString,
+    deserialize: (x: string) => new ObjectId(x),
+    order: 'desc',
+  }
+  const scanOptions = { batchSize: 100, sortField }
   const initialScan = await sync.runInitialScan(processRecords, scanOptions)
   // Wait for initial scan to complete
   await initialScan.start()
@@ -187,7 +214,7 @@ test('initial scan should resume after stop', async () => {
 })
 
 test('initial scan should not be marked as completed if connection is closed', async () => {
-  // Memoize hack
+  // Get a new connection since we're closing the connection in the test
   const { coll, redis, client } = await getConns({})
   const sync = initSync(redis, coll)
   sync.emitter.on('stateChange', console.log)
@@ -509,68 +536,6 @@ test('Schema change start/stop is idempotent', async () => {
   schemaChange.stop()
 })
 
-test('should fail health check - initial scan', async () => {
-  const { coll } = await getConns()
-  const sync = await getSync()
-  await initState(sync, coll)
-
-  let healthCheckFailed = false
-  const processed = []
-  let counter = 0
-  const processRecords = async (docs: ChangeStreamInsertDocument[]) => {
-    await setTimeout(counter++ === 1 ? 1000 : 100)
-    processed.push(...docs)
-  }
-  const scanOptions: QueueOptions & ScanOptions = {
-    batchSize: 100,
-    healthCheck: { enabled: true, interval: 500 },
-  }
-  const initialScan = await sync.runInitialScan(processRecords, scanOptions)
-  sync.emitter.on('healthCheckFail', () => {
-    healthCheckFailed = true
-    initialScan.stop()
-  })
-  // Wait for initial scan to complete
-  await initialScan.start()
-  assert.ok(healthCheckFailed)
-  assert.notEqual(processed.length, numDocs)
-  // Stop
-  await initialScan.stop()
-})
-
-test('should fail health check - change stream', async () => {
-  const { coll } = await getConns()
-  const sync = await getSync()
-  await initState(sync, coll)
-
-  let healthCheckFailed = false
-  const processed = []
-  const processRecord = async (doc: ChangeStreamDocument) => {
-    await setTimeout(ms('2s'))
-    processed.push(doc)
-  }
-  const options: ChangeStreamOptions = {
-    healthCheck: { enabled: true, maxSyncDelay: ms('1s') },
-  }
-  const changeStream = await sync.processChangeStream(processRecord, options)
-  sync.emitter.on('healthCheckFail', () => {
-    healthCheckFailed = true
-    changeStream.stop()
-  })
-  sync.emitter.on('cursorError', console.log)
-  // Start
-  changeStream.start()
-  await setTimeout(ms('1s'))
-  // Update records
-  await coll.updateOne({}, { $set: { name: 'Tom' } })
-  // Wait for health checker to pick up failure
-  await setTimeout(ms('2s'))
-  assert.ok(healthCheckFailed)
-  assert.notEqual(processed.length, numDocs)
-  // Stop
-  await changeStream.stop()
-})
-
 test('can extend events', async () => {
   const { coll, redis } = await getConns({})
   const sync = initSync<'foo' | 'bar'>(redis, coll)
@@ -580,4 +545,30 @@ test('can extend events', async () => {
   })
   sync.emitter.emit('foo', 'bar')
   assert.equal(emitted, 'bar')
+})
+
+test('should emit cursorError if change stream is closed', async () => {
+  // Get a new connection since we're closing the connection in the test
+  const { redis, coll, client } = await getConns({})
+  const sync = initSync(redis, coll)
+  let error: any
+  sync.emitter.on('cursorError', (event: CursorErrorEvent) => {
+    console.log(event)
+    error = event.error
+  })
+  await initState(sync, coll)
+
+  const processRecord = async () => {
+    await setTimeout(500)
+  }
+  const changeStream = await sync.processChangeStream(processRecord)
+  // Start
+  changeStream.start()
+  await setTimeout(ms('1s'))
+  // Update records
+  await coll.updateMany({}, { $set: { createdAt: new Date('2022-01-01') } })
+  // Close the connection.
+  await client.close()
+  await setTimeout(ms('8s'))
+  assert.ok(error?.message)
 })

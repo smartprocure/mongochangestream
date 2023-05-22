@@ -91,11 +91,10 @@ const detectSchemaChange = async (db: Db, options: ChangeOptions = {})
 
 ## Maintaining Health
 
-Sometimes things stop working and a restart seems to fix the issue. In order
-to automate this process you can pass `{healthCheck: {enabled: true}}` in the options
-for `runInitialScan` and `processChangeStream`. This will run a health check
-every `{healthCheck: {interval}}` (defaults to 1m). You can restart syncing
-by checking for the `healthCheckFail` event.
+Look for the `cursorError` event and restart the process or resync as needed.
+See also the `missingOplogEntry` utility function that helps determine if an
+oplog entry is no longer present and resumption of a change stream from a previous
+point is not possible.
 
 ## Companion Libraries
 
@@ -128,8 +127,8 @@ will cleanly end processing.
 
 ### The MongoDB primary goes down and a new primary is elected
 
-In this scenario, you will need to enable health checks and restart the
-initial scan and/or change stream when a health check failure occurs.
+In this scenario, you will need to subscribe to the `cursorError` event and
+restart the process or handle otherwise.
 
 ## Change Stream Strategies
 
