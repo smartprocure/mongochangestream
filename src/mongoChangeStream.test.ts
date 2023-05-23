@@ -20,6 +20,7 @@ import {
   MongoClient,
   Collection,
   ObjectId,
+  Db,
 } from 'mongodb'
 import Redis from 'ioredis'
 import { faker } from '@faker-js/faker'
@@ -35,7 +36,6 @@ const getConns = _.memoize(async (x?: any) => {
   const client = await MongoClient.connect(process.env.MONGO_CONN as string)
   const db = client.db()
   const coll = db.collection('testing')
-
   return { client, db, coll, redis }
 })
 
@@ -48,9 +48,11 @@ const getSync = async (options?: SyncOptions) => {
 
 const genUser = () => ({
   name: faker.name.fullName(),
-  city: faker.address.city(),
-  state: faker.address.state(),
-  zipCode: faker.address.zipCode(),
+  address: {
+    city: faker.address.city(),
+    state: faker.address.state(),
+    zipCode: faker.address.zipCode(),
+  },
   createdAt: faker.date.past(),
 })
 
@@ -61,9 +63,14 @@ const schema: JSONSchema = {
   properties: {
     _id: { bsonType: 'objectId' },
     name: { bsonType: 'string' },
-    city: { bsonType: 'string' },
-    state: { bsonType: 'string' },
-    zipCode: { bsonType: 'string' },
+    address: {
+      bsonType: 'object',
+      properties: {
+        city: { bsonType: 'string' },
+        state: { bsonType: 'string' },
+        zipCode: { bsonType: 'string' },
+      },
+    },
     createdAt: { bsonType: 'date' },
   },
 }
@@ -78,21 +85,26 @@ const populateCollection = (collection: Collection, count = numDocs) => {
   return collection.bulkWrite(users)
 }
 
-const initState = async (
-  sync: Awaited<ReturnType<typeof getSync>>,
-  coll: Collection
-) => {
-  // Reset state
+type SyncObj = Awaited<ReturnType<typeof getSync>>
+
+const initState = async (sync: SyncObj, db: Db, coll: Collection) => {
+  // Clear syncing state
   await sync.reset()
+  // Delete all documents
   await coll.deleteMany({})
+  // Set schema
+  await db.command({
+    collMod: coll.collectionName,
+    validator: { $jsonSchema: schema },
+  })
   // Populate data
   await populateCollection(coll)
 }
 
 test('should complete initial scan', async () => {
-  const { coll } = await getConns()
+  const { coll, db } = await getConns()
   const sync = await getSync()
-  await initState(sync, coll)
+  await initState(sync, db, coll)
 
   const processed = []
   const processRecords = async (docs: ChangeStreamInsertDocument[]) => {
@@ -108,10 +120,26 @@ test('should complete initial scan', async () => {
   await initialScan.stop()
 })
 
-test('should run initial scan in reverse sort order', async () => {
-  const { coll } = await getConns()
+test('should exit cleanly if initial scan is already complete', async () => {
+  const { coll, db, redis } = await getConns()
   const sync = await getSync()
-  await initState(sync, coll)
+  await initState(sync, db, coll)
+  // Mark initial scan complete
+  await redis.set(sync.keys.scanCompletedKey, new Date().toString())
+
+  const processRecords = async () => {
+    await setTimeout(50)
+  }
+  const scanOptions = { batchSize: 100 }
+  const initialScan = await sync.runInitialScan(processRecords, scanOptions)
+  await initialScan.start()
+  await initialScan.stop()
+})
+
+test('should run initial scan in reverse sort order', async () => {
+  const { coll, db } = await getConns()
+  const sync = await getSync()
+  await initState(sync, db, coll)
 
   const processed = []
   const processRecords = async (docs: ChangeStreamInsertDocument[]) => {
@@ -134,9 +162,9 @@ test('should run initial scan in reverse sort order', async () => {
 })
 
 test('should omit fields from initial scan', async () => {
-  const { coll } = await getConns()
+  const { coll, db } = await getConns()
   const sync = await getSync({ omit: ['name'] })
-  await initState(sync, coll)
+  await initState(sync, db, coll)
 
   const documents: Document[] = []
   const processRecords = async (docs: ChangeStreamInsertDocument[]) => {
@@ -180,9 +208,9 @@ test('should complete initial scan if collection is empty', async () => {
 })
 
 test('initial scan should resume after stop', async () => {
-  const { coll } = await getConns()
+  const { coll, db } = await getConns()
   const sync = await getSync()
-  await initState(sync, coll)
+  await initState(sync, db, coll)
 
   const processed = []
   const processRecords = async (docs: ChangeStreamInsertDocument[]) => {
@@ -215,11 +243,11 @@ test('initial scan should resume after stop', async () => {
 
 test('initial scan should not be marked as completed if connection is closed', async () => {
   // Get a new connection since we're closing the connection in the test
-  const { coll, redis, client } = await getConns({})
+  const { coll, redis, db, client } = await getConns({})
   const sync = initSync(redis, coll)
   sync.emitter.on('stateChange', console.log)
   sync.emitter.on('cursorError', console.log)
-  await initState(sync, coll)
+  await initState(sync, db, coll)
 
   const processed = []
   const processRecords = async (docs: ChangeStreamInsertDocument[]) => {
@@ -244,12 +272,11 @@ test('initial scan should not be marked as completed if connection is closed', a
 })
 
 test('initial scan should support custom pipeline', async () => {
-  const { coll } = await getConns()
+  const { coll, db } = await getConns()
   const sync = await getSync()
-  await initState(sync, coll)
+  await initState(sync, db, coll)
 
   sync.emitter.on('stateChange', console.log)
-  await initState(sync, coll)
 
   const documents: Document[] = []
   const processRecords = async (docs: ChangeStreamInsertDocument[]) => {
@@ -259,7 +286,11 @@ test('initial scan should support custom pipeline', async () => {
   const scanOptions: QueueOptions & ScanOptions = {
     batchSize: 50,
     pipeline: [
-      { $addFields: { cityState: { $concat: ['$city', '-', '$state'] } } },
+      {
+        $addFields: {
+          cityState: { $concat: ['$address.city', '-', '$address.state'] },
+        },
+      },
     ],
   }
   const initialScan = await sync.runInitialScan(processRecords, scanOptions)
@@ -273,9 +304,9 @@ test('initial scan should support custom pipeline', async () => {
 })
 
 test('should process records via change stream', async () => {
-  const { coll } = await getConns()
+  const { coll, db } = await getConns()
   const sync = await getSync()
-  await initState(sync, coll)
+  await initState(sync, db, coll)
 
   const processed = []
   const processRecord = async (doc: ChangeStreamDocument) => {
@@ -296,9 +327,9 @@ test('should process records via change stream', async () => {
 })
 
 test('should omit fields from change stream', async () => {
-  const { coll } = await getConns()
+  const { coll, db } = await getConns()
   const sync = await getSync({ omit: ['name'] })
-  await initState(sync, coll)
+  await initState(sync, db, coll)
 
   const documents: Document[] = []
   const processRecord = async (doc: ChangeStreamDocument) => {
@@ -320,10 +351,35 @@ test('should omit fields from change stream', async () => {
   await changeStream.stop()
 })
 
+test('should omit nested fields when parent field is omitted from change stream', async () => {
+  const { coll, db } = await getConns()
+  const sync = await getSync({ omit: ['address'] })
+  await initState(sync, db, coll)
+
+  const documents: Document[] = []
+  const processRecord = async (doc: ChangeStreamDocument) => {
+    await setTimeout(5)
+    if (doc.operationType === 'update' && doc.fullDocument) {
+      documents.push(doc.fullDocument)
+    }
+  }
+  const changeStream = await sync.processChangeStream(processRecord)
+  // Start
+  changeStream.start()
+  await setTimeout(ms('1s'))
+  // Update records
+  coll.updateMany({}, { $set: { 'address.zipCode': '90210' } })
+  // Wait for the change stream events to be processed
+  await setTimeout(ms('2s'))
+  assert.equal(documents[0].address?.zipCode, undefined)
+  // Stop
+  await changeStream.stop()
+})
+
 test('change stream should resume properly', async () => {
-  const { coll } = await getConns()
+  const { coll, db } = await getConns()
   const sync = await getSync()
-  await initState(sync, coll)
+  await initState(sync, db, coll)
 
   const processed = []
   // Change stream
@@ -351,14 +407,14 @@ test('change stream should resume properly', async () => {
 })
 
 test('change stream handle missing oplog entry properly', async () => {
-  const { coll, redis } = await getConns()
+  const { coll, db, redis } = await getConns()
   const sync = await getSync()
   let cursorError: any
   sync.emitter.on('cursorError', ({ error }: any) => {
     cursorError = error
   })
 
-  await initState(sync, coll)
+  await initState(sync, db, coll)
 
   // Set missing token key
   await redis.set(
@@ -379,6 +435,32 @@ test('change stream handle missing oplog entry properly', async () => {
   await changeStream.stop()
 })
 
+test('should emit cursorError if change stream is closed', async () => {
+  // Get a new connection since we're closing the connection in the test
+  const { redis, coll, db, client } = await getConns({})
+  const sync = initSync(redis, coll)
+  let error: any
+  sync.emitter.on('cursorError', (event: CursorErrorEvent) => {
+    console.log(event)
+    error = event.error
+  })
+  await initState(sync, db, coll)
+
+  const processRecord = async () => {
+    await setTimeout(500)
+  }
+  const changeStream = await sync.processChangeStream(processRecord)
+  // Start
+  changeStream.start()
+  await setTimeout(ms('1s'))
+  // Update records
+  await coll.updateMany({}, { $set: { createdAt: new Date('2022-01-01') } })
+  // Close the connection.
+  await client.close()
+  await setTimeout(ms('8s'))
+  assert.ok(error?.message)
+})
+
 test('starting change stream is idempotent', async () => {
   const sync = await getSync()
   // Change stream
@@ -393,9 +475,9 @@ test('starting change stream is idempotent', async () => {
 })
 
 test('stopping change stream is idempotent', async () => {
-  const { coll } = await getConns()
+  const { coll, db } = await getConns()
   const sync = await getSync()
-  await initState(sync, coll)
+  await initState(sync, db, coll)
 
   // Change stream
   const processRecord = async () => {
@@ -411,9 +493,9 @@ test('stopping change stream is idempotent', async () => {
 })
 
 test('starting initial scan is idempotent', async () => {
-  const { coll } = await getConns()
+  const { coll, db } = await getConns()
   const sync = await getSync()
-  await initState(sync, coll)
+  await initState(sync, db, coll)
 
   const processRecords = async () => {
     await setTimeout(50)
@@ -426,9 +508,9 @@ test('starting initial scan is idempotent', async () => {
 })
 
 test('stopping initial scan is idempotent', async () => {
-  const { coll } = await getConns()
+  const { coll, db } = await getConns()
   const sync = await getSync()
-  await initState(sync, coll)
+  await initState(sync, db, coll)
 
   const processRecords = async () => {
     await setTimeout(50)
@@ -442,9 +524,9 @@ test('stopping initial scan is idempotent', async () => {
 })
 
 test('Should resync when resync flag is set', async () => {
-  const { coll, redis } = await getConns()
+  const { coll, db, redis } = await getConns()
   const sync = await getSync()
-  await initState(sync, coll)
+  await initState(sync, db, coll)
 
   let resyncTriggered = false
   const processed = []
@@ -510,18 +592,23 @@ test('Detect schema change', async () => {
   })
   let newSchema: object = {}
   sync.emitter.on('schemaChange', ({ currentSchema }: SchemaChangeEvent) => {
+    console.dir(currentSchema, { depth: 10 })
     newSchema = currentSchema
   })
   // Start detecting schema changes
   schemaChange.start()
   // Modify the schema
-  schema.properties.email = { bsonType: 'string' }
+  const modifiedSchema = _.set(
+    'properties.email',
+    { bsonType: 'string' },
+    schema
+  )
   await db.command({
     collMod: coll.collectionName,
-    validator: { $jsonSchema: schema },
+    validator: { $jsonSchema: modifiedSchema },
   })
   await setTimeout(ms('1s'))
-  assert.deepEqual(schema, newSchema)
+  assert.deepEqual(modifiedSchema, newSchema)
   schemaChange.stop()
 })
 
@@ -545,30 +632,4 @@ test('can extend events', async () => {
   })
   sync.emitter.emit('foo', 'bar')
   assert.equal(emitted, 'bar')
-})
-
-test('should emit cursorError if change stream is closed', async () => {
-  // Get a new connection since we're closing the connection in the test
-  const { redis, coll, client } = await getConns({})
-  const sync = initSync(redis, coll)
-  let error: any
-  sync.emitter.on('cursorError', (event: CursorErrorEvent) => {
-    console.log(event)
-    error = event.error
-  })
-  await initState(sync, coll)
-
-  const processRecord = async () => {
-    await setTimeout(500)
-  }
-  const changeStream = await sync.processChangeStream(processRecord)
-  // Start
-  changeStream.start()
-  await setTimeout(ms('1s'))
-  // Update records
-  await coll.updateMany({}, { $set: { createdAt: new Date('2022-01-01') } })
-  // Close the connection.
-  await client.close()
-  await setTimeout(ms('8s'))
-  assert.ok(error?.message)
 })

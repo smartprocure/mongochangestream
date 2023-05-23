@@ -66,7 +66,7 @@ export const getKeys = (collection: Collection) => {
 
 const stateTransitions: StateTransitions<State> = {
   stopped: ['starting'],
-  starting: ['started'],
+  starting: ['started', 'stopped'],
   started: ['stopping'],
   stopping: ['stopped'],
 }

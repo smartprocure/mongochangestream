@@ -1,3 +1,7 @@
+# 0.38.1
+
+- Fix bug with fsm. Added accompanying test.
+
 # 0.38.0
 
 - Remove all health check code in favor of using the `cursorError` event.
