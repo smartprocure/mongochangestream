@@ -439,6 +439,7 @@ test('should emit cursorError if change stream is closed', async () => {
   // Get a new connection since we're closing the connection in the test
   const { redis, coll, db, client } = await getConns({})
   const sync = initSync(redis, coll)
+
   let error: any
   sync.emitter.on('cursorError', (event: CursorErrorEvent) => {
     console.log(event)

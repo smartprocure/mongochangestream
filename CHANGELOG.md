@@ -1,3 +1,7 @@
+# 0.39.0
+
+- Expose FSM via `state` property for `runInitialScan` and `processChangeStream`.
+
 # 0.38.1
 
 - Fix bug with fsm. Added accompanying test.

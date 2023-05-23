@@ -76,6 +76,8 @@ const simpleStateTransistions: StateTransitions<SimpleState> = {
   stopped: ['started'],
 }
 
+const stateFields = ['get', 'is'] as const
+
 export function initSync<ExtendedEvents extends EventEmitter.ValidEventTypes>(
   redis: Redis,
   collection: Collection,
@@ -293,7 +295,7 @@ export function initSync<ExtendedEvents extends EventEmitter.ValidEventTypes>(
       start()
     }
 
-    return { start, stop, restart }
+    return { start, stop, restart, state: _.pick(stateFields, state) }
   }
 
   const processChangeStream = async (
@@ -406,7 +408,7 @@ export function initSync<ExtendedEvents extends EventEmitter.ValidEventTypes>(
       start()
     }
 
-    return { start, stop, restart }
+    return { start, stop, restart, state: _.pick(stateFields, state) }
   }
 
   const reset = async () => {

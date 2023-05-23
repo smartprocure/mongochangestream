@@ -70,6 +70,7 @@ export interface SchemaChangeEvent {
 
 export interface StateChangeEvent {
   type: 'stateChange'
+  name: string
   from: string
   to: string
 }
