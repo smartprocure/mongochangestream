@@ -246,15 +246,15 @@ export function initSync<ExtendedEvents extends EventEmitter.ValidEventTypes>(
       }
       // Flush the queue
       await queue.flush()
-      // An error occurred checking for next
-      if (nextChecker.errorExists()) {
+      // An error occurred getting next and we are not stopping
+      if (nextChecker.errorExists() && !state.is('stopping')) {
         emit('cursorError', {
           name: 'runInitialScan',
           error: nextChecker.getLastError(),
         })
       }
-      // We're all done
-      else {
+      // Exited cleanly from the loop so we're done
+      if (!nextChecker.errorExists()) {
         debug('Completed initial scan')
         // Record scan complete
         await redis.set(keys.scanCompletedKey, new Date().toString())
@@ -368,8 +368,8 @@ export function initSync<ExtendedEvents extends EventEmitter.ValidEventTypes>(
           new Date().getTime()
         )
       }
-      // Emit
-      if (nextChecker.errorExists()) {
+      // An error occurred getting next and we are not stopping
+      if (nextChecker.errorExists() && !state.is('stopping')) {
         emit('cursorError', {
           name: 'processChangeStream',
           error: nextChecker.getLastError(),

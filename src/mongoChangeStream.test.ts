@@ -223,13 +223,18 @@ test('initial scan should resume after stop', async () => {
   sync.emitter.on('initialScanComplete', () => {
     completed = true
   })
-  sync.emitter.on('cursorError', console.log)
+  let cursorError = false
+  sync.emitter.on('cursorError', () => {
+    cursorError = true
+  })
   // Start
   initialScan.start()
   // Allow for some records to be processed
   await setTimeout(500)
   // Stop the initial scan
   await initialScan.stop()
+  // Should not emit cursorError when stopping
+  assert.equal(cursorError, false)
   // Wait for the initial scan to complete
   initialScan.start()
   // Add some more records
@@ -308,6 +313,10 @@ test('should process records via change stream', async () => {
   const sync = await getSync()
   await initState(sync, db, coll)
 
+  let cursorError = false
+  sync.emitter.on('cursorError', () => {
+    cursorError = true
+  })
   const processed = []
   const processRecord = async (doc: ChangeStreamDocument) => {
     await setTimeout(5)
@@ -324,6 +333,8 @@ test('should process records via change stream', async () => {
   assert.equal(processed.length, numDocs)
   // Stop
   await changeStream.stop()
+  // Should not emit cursorError when stopping
+  assert.equal(cursorError, false)
 })
 
 test('should omit fields from change stream', async () => {

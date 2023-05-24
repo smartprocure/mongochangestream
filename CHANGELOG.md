@@ -1,3 +1,7 @@
+# 0.40.0
+
+- Don't emit the `cursorError` event when stopping.
+
 # 0.39.0
 
 - Expose FSM via `state` property for `runInitialScan` and `processChangeStream`.
