@@ -203,27 +203,30 @@ export function initSync<ExtendedEvents extends EventEmitter.ValidEventTypes>(
         state.change('stopped')
         return
       }
+      let lastProcess: any = null
 
       const _processRecords = async (records: ChangeStreamInsertDocument[]) => {
+        await lastProcess
         const processes = []
         for (const rs of _.chunk(Math.ceil(records.length / 25), records)) {
           processes.push(processRecords(rs))
         }
         // Process batch of records
-        await Promise.all(processes)
-        debug('Processed %d records', records.length)
-        const lastDocument = records[records.length - 1].fullDocument
-        // Record last id of the batch
-        const lastId = _.get(sortField.field, lastDocument)
-        debug('Last id %s', lastId)
-        if (lastId) {
-          await redis.mset(
-            keys.lastScanIdKey,
-            sortField.serialize(lastId),
-            keys.lastScanProcessedAtKey,
-            new Date().getTime()
-          )
-        }
+        lastProcess = Promise.all(processes).then(async () => {
+          debug('Processed %d records', records.length)
+          const lastDocument = records[records.length - 1].fullDocument
+          // Record last id of the batch
+          const lastId = _.get(sortField.field, lastDocument)
+          debug('Last id %s', lastId)
+          if (lastId) {
+            await redis.mset(
+              keys.lastScanIdKey,
+              sortField.serialize(lastId),
+              keys.lastScanProcessedAtKey,
+              new Date().getTime()
+            )
+          }
+        })
       }
       // Create queue
       const queue = batchQueue(_processRecords, options)
@@ -250,6 +253,7 @@ export function initSync<ExtendedEvents extends EventEmitter.ValidEventTypes>(
       }
       // Flush the queue
       await queue.flush()
+      await lastProcess
       // An error occurred getting next and we are not stopping
       if (nextChecker.errorExists() && !state.is('stopping')) {
         emit('cursorError', {
