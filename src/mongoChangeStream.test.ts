@@ -421,8 +421,8 @@ test('change stream handle missing oplog entry properly', async () => {
   const { coll, db, redis } = await getConns()
   const sync = await getSync()
   let cursorError: any
-  sync.emitter.on('cursorError', ({ error }: any) => {
-    cursorError = error
+  sync.emitter.on('cursorError', (event: CursorErrorEvent) => {
+    cursorError = event
   })
 
   await initState(sync, db, coll)
@@ -442,7 +442,58 @@ test('change stream handle missing oplog entry properly', async () => {
   // Let change stream connect
   await setTimeout(ms('1s'))
 
-  assert.ok(missingOplogEntry(cursorError?.message))
+  assert.ok(missingOplogEntry(cursorError.error))
+  await changeStream.stop()
+})
+
+test('change stream handle invalid oplog entry properly', async () => {
+  const { coll, db, redis } = await getConns()
+  const sync = await getSync()
+  let cursorError: any
+  sync.emitter.on('cursorError', (event: CursorErrorEvent) => {
+    cursorError = event
+  })
+
+  await initState(sync, db, coll)
+
+  // Set missing token key
+  await redis.set(sync.keys.changeStreamTokenKey, '{"_data":"123"}')
+
+  // Change stream
+  const processRecord = async () => {
+    await setTimeout(5)
+  }
+  const changeStream = await sync.processChangeStream(processRecord)
+  changeStream.start()
+  // Let change stream connect
+  await setTimeout(ms('1s'))
+
+  assert.ok(missingOplogEntry(cursorError.error))
+  await changeStream.stop()
+})
+
+test('change stream should handle empty collection', async () => {
+  const { coll, db } = await getConns()
+  const sync = await getSync()
+  let cursorError = false
+  sync.emitter.on('cursorError', () => {
+    cursorError = true
+  })
+
+  await initState(sync, db, coll)
+  // Delete all documents
+  await coll.deleteMany({})
+
+  // Change stream
+  const processRecord = async () => {
+    await setTimeout(5)
+  }
+  const changeStream = await sync.processChangeStream(processRecord)
+  changeStream.start()
+  // Let change stream connect
+  await setTimeout(ms('1s'))
+
+  assert.equal(cursorError, false)
   await changeStream.stop()
 })
 

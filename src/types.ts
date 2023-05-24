@@ -4,6 +4,8 @@ import {
   ChangeStreamDocument,
   ChangeStreamInsertDocument,
   Document,
+  MongoServerError,
+  MongoAPIError,
 } from 'mongodb'
 
 export type Cursor = ChangeStream | AggregationCursor
@@ -79,10 +81,12 @@ export interface InitialScanCompleteEvent {
   type: 'initialScanComplete'
 }
 
+export type CursorError = MongoServerError | MongoAPIError
+
 export interface CursorErrorEvent {
   type: 'cursorError'
   name: 'runInitialScan' | 'processChangeStream'
-  error: Error
+  error: CursorError
 }
 
 // State

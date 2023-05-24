@@ -1,3 +1,7 @@
+# 0.41.0
+
+- More robust error code handling for `missingOplogEntry`.
+
 # 0.40.0
 
 - Don't emit the `cursorError` event when stopping.

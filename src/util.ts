@@ -1,7 +1,7 @@
-import { Collection } from 'mongodb'
+import { Collection, MongoServerError } from 'mongodb'
 import _ from 'lodash/fp.js'
 import { Node, walkie } from 'obj-walker'
-import { Cursor, JSONSchema } from './types.js'
+import { Cursor, CursorError, JSONSchema } from './types.js'
 import _debug from 'debug'
 
 const debug = _debug('mongochangestream')
@@ -87,11 +87,21 @@ export const safelyCheckNext = (cursor: Cursor) => {
   return { hasNext, errorExists, getLastError }
 }
 
+const oplogErrorCodeNames = [
+  'ChangeStreamHistoryLost',
+  'InvalidResumeToken',
+  'FailedToParse',
+]
+
 /**
- * Check if error message indicates a missing oplog entry.
+ * Check if error message indicates a missing or invalid oplog entry.
  */
-export const missingOplogEntry = (x: string) =>
-  x.includes('resume point may no longer be in the oplog')
+export const missingOplogEntry = (error: CursorError) => {
+  if (error instanceof MongoServerError) {
+    return oplogErrorCodeNames.includes(error?.codeName ?? '')
+  }
+  return false
+}
 
 /**
  * Creates a delayed function that only invokes fn at most once every ms.
