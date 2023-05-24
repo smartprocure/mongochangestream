@@ -205,8 +205,12 @@ export function initSync<ExtendedEvents extends EventEmitter.ValidEventTypes>(
       }
 
       const _processRecords = async (records: ChangeStreamInsertDocument[]) => {
+        const processes = []
+        for (const rs of _.chunk(Math.ceil(records.length / 25), records)) {
+          processes.push(processRecords(rs))
+        }
         // Process batch of records
-        await processRecords(records)
+        await Promise.all(processes)
         debug('Processed %d records', records.length)
         const lastDocument = records[records.length - 1].fullDocument
         // Record last id of the batch
