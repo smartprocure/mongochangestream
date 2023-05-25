@@ -33,8 +33,8 @@ const client = await MongoClient.connect(mongoUrl)
 const db = client.db('someDb')
 const coll = db.collection('someColl')
 
-const processRecord = async (doc: ChangeStreamDocument) => {
-  console.dir(doc, { depth: 10 })
+const processCSRecords = async (docs: ChangeStreamDocument[]) => {
+  console.dir(docs, { depth: 10 })
 }
 const processRecords = async (docs: ChangeStreamInsertDocument[]) => {
   console.dir(docs, { depth: 10 })
@@ -45,7 +45,7 @@ const sync = initSync(redis, coll)
 const initialScan = await sync.runInitialScan(processRecords)
 initialScan.start()
 // Process change stream
-const changeStream = await sync.processChangeStream(processRecord)
+const changeStream = await sync.processChangeStream(processCSRecords)
 changeStream.start()
 setTimeout(changeStream.stop, 30000)
 // Detect schema changes and ignore metadata fields (i.e., title and description)
@@ -70,20 +70,22 @@ The `reset` method will delete all relevant keys for a given collection in Redis
 ```typescript
 import { ChangeStreamDocument, Collection, Document } from 'mongodb'
 
-export type ProcessRecord = (doc: ChangeStreamDocument) => void | Promise<void>
+export type ProcessChangeStreamRecords = (
+  docs: ChangeStreamDocument[]
+) => MaybePromise<void>
 
-export type ProcessRecords = (
-  doc: ChangeStreamInsertDocument[]
-) => void | Promise<void>
+export type ProcessInitialScanRecords = (
+  docs: ChangeStreamInsertDocument[]
+) => MaybePromise<void>
 
 const runInitialScan = async (
-  processRecords: ProcessRecords,
+  processRecords: ProcessInitialScanRecords,
   options: QueueOptions & ScanOptions = {}
 )
 
 const processChangeStream = async (
-  processRecord: ProcessRecord,
-  options: ChangeStreamOptions = {}
+  processRecords: ProcessChangeStreamRecords,
+  options: QueueOptions & ChangeStreamOptions = {}
 )
 
 const detectSchemaChange = async (db: Db, options: ChangeOptions = {})
@@ -143,7 +145,7 @@ set to `insert`. An actual update change event will include the field-level chan
 in addition to the full document after the change.
 
 NOTE: Exceptions are not caught by this library. You must catch them in your
-`processRecord` callback and handle them accordingly. For example, an insert
+`processRecords` callback and handle them accordingly. For example, an insert
 that fails due to a primary key already existing in the destination datastore.
 
 ### Elasticsearch

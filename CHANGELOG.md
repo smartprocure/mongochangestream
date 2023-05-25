@@ -1,3 +1,9 @@
+# 0.42.0
+
+- NOTE: Breaking change!
+- `processChangeStream` is now batched, meaning the callback now receives an array of
+  change stream events.
+
 # 0.41.0
 
 - More robust error code handling for `missingOplogEntry`.

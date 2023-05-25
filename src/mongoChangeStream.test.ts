@@ -318,11 +318,13 @@ test('should process records via change stream', async () => {
     cursorError = true
   })
   const processed = []
-  const processRecord = async (doc: ChangeStreamDocument) => {
-    await setTimeout(5)
-    processed.push(doc)
+  const processRecords = async (docs: ChangeStreamDocument[]) => {
+    for (const doc of docs) {
+      await setTimeout(5)
+      processed.push(doc)
+    }
   }
-  const changeStream = await sync.processChangeStream(processRecord)
+  const changeStream = await sync.processChangeStream(processRecords)
   // Start
   changeStream.start()
   await setTimeout(ms('1s'))
@@ -343,13 +345,15 @@ test('should omit fields from change stream', async () => {
   await initState(sync, db, coll)
 
   const documents: Document[] = []
-  const processRecord = async (doc: ChangeStreamDocument) => {
-    await setTimeout(5)
-    if (doc.operationType === 'update' && doc.fullDocument) {
-      documents.push(doc.fullDocument)
+  const processRecords = async (docs: ChangeStreamDocument[]) => {
+    for (const doc of docs) {
+      await setTimeout(5)
+      if (doc.operationType === 'update' && doc.fullDocument) {
+        documents.push(doc.fullDocument)
+      }
     }
   }
-  const changeStream = await sync.processChangeStream(processRecord)
+  const changeStream = await sync.processChangeStream(processRecords)
   // Start
   changeStream.start()
   await setTimeout(ms('1s'))
@@ -368,13 +372,15 @@ test('should omit nested fields when parent field is omitted from change stream'
   await initState(sync, db, coll)
 
   const documents: Document[] = []
-  const processRecord = async (doc: ChangeStreamDocument) => {
-    await setTimeout(5)
-    if (doc.operationType === 'update' && doc.fullDocument) {
-      documents.push(doc.fullDocument)
+  const processRecords = async (docs: ChangeStreamDocument[]) => {
+    for (const doc of docs) {
+      await setTimeout(5)
+      if (doc.operationType === 'update' && doc.fullDocument) {
+        documents.push(doc.fullDocument)
+      }
     }
   }
-  const changeStream = await sync.processChangeStream(processRecord)
+  const changeStream = await sync.processChangeStream(processRecords)
   // Start
   changeStream.start()
   await setTimeout(ms('1s'))
@@ -394,11 +400,13 @@ test('change stream should resume properly', async () => {
 
   const processed = []
   // Change stream
-  const processRecord = async (doc: ChangeStreamDocument) => {
-    await setTimeout(5)
-    processed.push(doc)
+  const processRecords = async (docs: ChangeStreamDocument[]) => {
+    for (const doc of docs) {
+      await setTimeout(5)
+      processed.push(doc)
+    }
   }
-  const changeStream = await sync.processChangeStream(processRecord)
+  const changeStream = await sync.processChangeStream(processRecords)
   changeStream.start()
   // Let change stream connect
   await setTimeout(ms('1s'))
@@ -434,10 +442,10 @@ test('change stream handle missing oplog entry properly', async () => {
   )
 
   // Change stream
-  const processRecord = async () => {
+  const processRecords = async () => {
     await setTimeout(5)
   }
-  const changeStream = await sync.processChangeStream(processRecord)
+  const changeStream = await sync.processChangeStream(processRecords)
   changeStream.start()
   // Let change stream connect
   await setTimeout(ms('1s'))
@@ -485,10 +493,10 @@ test('change stream should handle empty collection', async () => {
   await coll.deleteMany({})
 
   // Change stream
-  const processRecord = async () => {
+  const processRecords = async () => {
     await setTimeout(5)
   }
-  const changeStream = await sync.processChangeStream(processRecord)
+  const changeStream = await sync.processChangeStream(processRecords)
   changeStream.start()
   // Let change stream connect
   await setTimeout(ms('1s'))
@@ -509,10 +517,10 @@ test('should emit cursorError if change stream is closed', async () => {
   })
   await initState(sync, db, coll)
 
-  const processRecord = async () => {
+  const processRecords = async () => {
     await setTimeout(500)
   }
-  const changeStream = await sync.processChangeStream(processRecord)
+  const changeStream = await sync.processChangeStream(processRecords)
   // Start
   changeStream.start()
   await setTimeout(ms('1s'))
@@ -527,10 +535,10 @@ test('should emit cursorError if change stream is closed', async () => {
 test('starting change stream is idempotent', async () => {
   const sync = await getSync()
   // Change stream
-  const processRecord = async () => {
+  const processRecords = async () => {
     await setTimeout(5)
   }
-  const changeStream = await sync.processChangeStream(processRecord)
+  const changeStream = await sync.processChangeStream(processRecords)
   // Start twice
   changeStream.start()
   changeStream.start()
@@ -543,10 +551,10 @@ test('stopping change stream is idempotent', async () => {
   await initState(sync, db, coll)
 
   // Change stream
-  const processRecord = async () => {
+  const processRecords = async () => {
     await setTimeout(5)
   }
-  const changeStream = await sync.processChangeStream(processRecord)
+  const changeStream = await sync.processChangeStream(processRecords)
   changeStream.start()
   // Change documents
   await coll.updateMany({}, { $set: { createdAt: new Date('2022-01-03') } })

@@ -11,11 +11,15 @@ import {
 export type Cursor = ChangeStream | AggregationCursor
 export type JSONSchema = Record<string, any>
 
-export type ProcessRecord = (doc: ChangeStreamDocument) => void | Promise<void>
+type MaybePromise<T> = T | Promise<T>
 
-export type ProcessRecords = (
-  doc: ChangeStreamInsertDocument[]
-) => void | Promise<void>
+export type ProcessChangeStreamRecords = (
+  docs: ChangeStreamDocument[]
+) => MaybePromise<void>
+
+export type ProcessInitialScanRecords = (
+  docs: ChangeStreamInsertDocument[]
+) => MaybePromise<void>
 
 // Options
 
