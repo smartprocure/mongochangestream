@@ -346,13 +346,13 @@ export function initSync<ExtendedEvents extends EventEmitter.ValidEventTypes>(
         // Process batch of records
         await processRecords(records)
         debug('Processed %d records', records.length)
-        const lastId = records[records.length - 1]._id
-        debug('Last id %s', lastId)
-        if (lastId) {
+        const token = records[records.length - 1]._id
+        debug('Token %s', token)
+        if (token) {
           // Persist state
           await redis.mset(
             keys.changeStreamTokenKey,
-            JSON.stringify(lastId),
+            JSON.stringify(token),
             keys.lastChangeProcessedAtKey,
             new Date().getTime()
           )
