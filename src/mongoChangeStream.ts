@@ -1,5 +1,6 @@
 import _ from 'lodash/fp.js'
 import {
+  ChangeStreamDocument,
   ChangeStreamInsertDocument,
   Collection,
   ObjectId,
@@ -10,8 +11,8 @@ import * as mongodb from 'mongodb'
 import {
   Events,
   SyncOptions,
-  ProcessRecord,
-  ProcessRecords,
+  ProcessChangeStreamRecords,
+  ProcessInitialScanRecords,
   ScanOptions,
   ChangeOptions,
   ChangeStreamOptions,
@@ -129,7 +130,7 @@ export function initSync<ExtendedEvents extends EventEmitter.ValidEventTypes>(
   }
 
   async function runInitialScan<T = any>(
-    processRecords: ProcessRecords,
+    processRecords: ProcessInitialScanRecords,
     options: QueueOptions & ScanOptions<T> = {}
   ) {
     let deferred: Deferred
@@ -299,8 +300,8 @@ export function initSync<ExtendedEvents extends EventEmitter.ValidEventTypes>(
   }
 
   const processChangeStream = async (
-    processRecord: ProcessRecord,
-    options: ChangeStreamOptions = {}
+    processRecords: ProcessChangeStreamRecords,
+    options: QueueOptions & ChangeStreamOptions = {}
   ) => {
     let deferred: Deferred
     let changeStream: ChangeStream
@@ -340,8 +341,30 @@ export function initSync<ExtendedEvents extends EventEmitter.ValidEventTypes>(
         await state.waitForChange('stopped')
       }
       state.change('starting')
+
+      const _processRecords = async (records: ChangeStreamDocument[]) => {
+        // Process batch of records
+        await processRecords(records)
+        debug('Processed %d records', records.length)
+        const lastId = records[records.length - 1]._id
+        debug('Last id %s', lastId)
+        if (lastId) {
+          // Persist state
+          await redis.mset(
+            keys.changeStreamTokenKey,
+            JSON.stringify(lastId),
+            keys.lastChangeProcessedAtKey,
+            new Date().getTime()
+          )
+        }
+      }
       // New deferred
       deferred = defer()
+      // Create queue
+      const queue = batchQueue(_processRecords, {
+        timeout: ms('30s'),
+        ...options,
+      })
       // Start the change stream
       changeStream = await getChangeStream()
       state.change('started')
@@ -350,24 +373,14 @@ export function initSync<ExtendedEvents extends EventEmitter.ValidEventTypes>(
       while (await nextChecker.hasNext()) {
         let event = await changeStream.next()
         debug('Change stream event %O', event)
-        // Get resume token
-        const token = event?._id
-        debug('token %o', token)
         // Omit nested fields that are not handled by $unset.
         // For example, if 'a' was omitted then 'a.b.c' should be omitted.
         if (event.operationType === 'update' && omit) {
           event = omitFieldForUpdate(omit)(event)
         }
-        // Process record
-        await processRecord(event)
-        // Persist state
-        await redis.mset(
-          keys.changeStreamTokenKey,
-          JSON.stringify(token),
-          keys.lastChangeProcessedAtKey,
-          new Date().getTime()
-        )
+        await queue.enqueue(event)
       }
+      await queue.flush()
       // An error occurred getting next and we are not stopping
       if (nextChecker.errorExists() && !state.is('stopping')) {
         emit('cursorError', {
