@@ -1,3 +1,9 @@
+# 0.43.0
+
+- Optionally pass an array of operation types (`insert`, `update`, ...) to `processChangeStream`.
+  This allows you to skip operations you don't care about. For example, a `delete` operation
+  due to a collection TTL index.
+
 # 0.42.0
 
 - NOTE: Breaking change!

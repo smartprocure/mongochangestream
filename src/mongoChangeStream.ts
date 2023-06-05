@@ -310,6 +310,8 @@ export function initSync<ExtendedEvents extends EventEmitter.ValidEventTypes>(
       onStateChange: emitStateChange,
     })
     const defaultOptions = { fullDocument: 'updateLookup' }
+    const operationTypes = options.operationTypes
+    debug('Operation types %o', operationTypes)
 
     /**
      * Get the change stream, resuming from a previous token if exists.
@@ -373,6 +375,11 @@ export function initSync<ExtendedEvents extends EventEmitter.ValidEventTypes>(
       while (await nextChecker.hasNext()) {
         let event = await changeStream.next()
         debug('Change stream event %O', event)
+        // Skip the event if the operation type is not one we care about
+        if (operationTypes && !operationTypes.includes(event.operationType)) {
+          debug('Skipping operation type: %s', event.operationType)
+          continue
+        }
         // Omit nested fields that are not handled by $unset.
         // For example, if 'a' was omitted then 'a.b.c' should be omitted.
         if (event.operationType === 'update' && omit) {

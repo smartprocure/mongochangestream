@@ -46,6 +46,7 @@ export interface ScanOptions<T = any> {
 
 export interface ChangeStreamOptions {
   pipeline?: Document[]
+  operationTypes?: ChangeStreamDocument['operationType'][]
 }
 
 export interface ChangeOptions {

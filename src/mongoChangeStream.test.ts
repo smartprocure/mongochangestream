@@ -393,6 +393,37 @@ test('should omit nested fields when parent field is omitted from change stream'
   await changeStream.stop()
 })
 
+test('should omit operation types from change stream', async () => {
+  const { coll, db } = await getConns()
+  const sync = await getSync()
+  await initState(sync, db, coll)
+
+  const operations: string[] = []
+  const processRecords = async (docs: ChangeStreamDocument[]) => {
+    for (const doc of docs) {
+      await setTimeout(5)
+      operations.push(doc.operationType)
+    }
+  }
+  const changeStream = await sync.processChangeStream(processRecords, {
+    operationTypes: ['insert'],
+    // Short timeout since only event will be queued
+    timeout: 500,
+  })
+  // Start
+  changeStream.start()
+  await setTimeout(ms('1s'))
+  // Update records
+  await coll.updateMany({}, { $set: { name: 'unknown' } })
+  // Insert record
+  await coll.insertOne(genUser())
+  // Wait for the change stream events to be processed
+  await setTimeout(ms('2s'))
+  assert.deepEqual(_.uniq(operations), ['insert'])
+  // Stop
+  await changeStream.stop()
+})
+
 test('change stream should resume properly', async () => {
   const { coll, db } = await getConns()
   const sync = await getSync()
