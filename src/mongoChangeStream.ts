@@ -183,88 +183,99 @@ export function initSync<ExtendedEvents extends EventEmitter.ValidEventTypes>(
 
     /** Start the initial scan */
     const start = async () => {
-      debug('Starting initial scan')
-      // Nothing to do
-      if (state.is('starting', 'started')) {
-        debug('Initial scan already starting or started')
-        return
-      }
-      if (state.is('stopping')) {
-        // Wait until stopping -> stopped
-        await state.waitForChange('stopped')
-      }
-      state.change('starting')
-      deferred = defer()
-      // Determine if initial scan has already completed
-      const scanCompleted = await redis.get(keys.scanCompletedKey)
-      // Scan already completed so return
-      if (scanCompleted) {
-        debug(`Initial scan previously completed on %s`, scanCompleted)
-        // We're done
-        state.change('stopped')
-        return
-      }
-
-      const _processRecords = async (records: ChangeStreamInsertDocument[]) => {
-        // Process batch of records
-        await processRecords(records)
-        debug('Processed %d records', records.length)
-        const lastDocument = records[records.length - 1].fullDocument
-        // Record last id of the batch
-        const lastId = _.get(sortField.field, lastDocument)
-        debug('Last id %s', lastId)
-        if (lastId) {
-          await redis.mset(
-            keys.lastScanIdKey,
-            sortField.serialize(lastId),
-            keys.lastScanProcessedAtKey,
-            new Date().getTime()
-          )
+      try {
+        debug('Starting initial scan')
+        // Nothing to do
+        if (state.is('starting', 'started')) {
+          debug('Initial scan already starting or started')
+          return
         }
-      }
-      // Create queue
-      const queue = batchQueue(_processRecords, options)
-      // Query collection
-      cursor = await getCursor()
-      // Change state
-      state.change('started')
-
-      const ns = { db: collection.dbName, coll: collection.collectionName }
-      const nextChecker = safelyCheckNext(cursor)
-      // Process documents
-      while (await nextChecker.hasNext()) {
-        const doc = await cursor.next()
-        debug('Initial scan doc %O', doc)
-        // Doc can be null if cursor is closed
-        if (doc) {
-          const changeStreamDoc = {
-            fullDocument: doc,
-            operationType: 'insert',
-            ns,
-          } as unknown as ChangeStreamInsertDocument
-          await queue.enqueue(changeStreamDoc)
+        if (state.is('stopping')) {
+          // Wait until stopping -> stopped
+          await state.waitForChange('stopped')
         }
+        state.change('starting')
+        deferred = defer()
+        // Determine if initial scan has already completed
+        const scanCompleted = await redis.get(keys.scanCompletedKey)
+        // Scan already completed so return
+        if (scanCompleted) {
+          debug(`Initial scan previously completed on %s`, scanCompleted)
+          // We're done
+          state.change('stopped')
+          return
+        }
+
+        const _processRecords = async (
+          records: ChangeStreamInsertDocument[]
+        ) => {
+          // Process batch of records
+          await processRecords(records)
+          debug('Processed %d records', records.length)
+          const lastDocument = records[records.length - 1].fullDocument
+          // Record last id of the batch
+          const lastId = _.get(sortField.field, lastDocument)
+          debug('Last id %s', lastId)
+          if (lastId) {
+            await redis.mset(
+              keys.lastScanIdKey,
+              sortField.serialize(lastId),
+              keys.lastScanProcessedAtKey,
+              new Date().getTime()
+            )
+          }
+        }
+        // Create queue
+        const queue = batchQueue(_processRecords, options)
+        // Query collection
+        cursor = await getCursor()
+        // Change state
+        state.change('started')
+
+        const ns = { db: collection.dbName, coll: collection.collectionName }
+        const nextChecker = safelyCheckNext(cursor)
+        // Process documents
+        while (await nextChecker.hasNext()) {
+          const doc = await cursor.next()
+          debug('Initial scan doc %O', doc)
+          // Doc can be null if cursor is closed
+          if (doc) {
+            const changeStreamDoc = {
+              fullDocument: doc,
+              operationType: 'insert',
+              ns,
+            } as unknown as ChangeStreamInsertDocument
+            await queue.enqueue(changeStreamDoc)
+          }
+        }
+        // Flush the queue
+        await queue.flush()
+        // An error occurred getting next and we are not stopping
+        if (nextChecker.errorExists() && !state.is('stopping')) {
+          emit('cursorError', {
+            name: 'runInitialScan',
+            error: nextChecker.getLastError(),
+          })
+        }
+        // Exited cleanly from the loop so we're done
+        if (!nextChecker.errorExists()) {
+          debug('Completed initial scan')
+          // Record scan complete
+          await redis.set(keys.scanCompletedKey, new Date().toString())
+          // Emit event
+          emit('initialScanComplete', {})
+        }
+        // Resolve deferred
+        deferred.done()
+        debug('Exit initial scan')
+      } catch (err) {
+        if (err instanceof Error) {
+          const collectionKey = getCollectionKey(collection)
+          debug('Initial scan error on %s : %O', collectionKey, err)
+          err.message = `Initial scan error on ${collectionKey} : ${err.message}`
+        }
+        throw err
       }
-      // Flush the queue
-      await queue.flush()
-      // An error occurred getting next and we are not stopping
-      if (nextChecker.errorExists() && !state.is('stopping')) {
-        emit('cursorError', {
-          name: 'runInitialScan',
-          error: nextChecker.getLastError(),
-        })
-      }
-      // Exited cleanly from the loop so we're done
-      if (!nextChecker.errorExists()) {
-        debug('Completed initial scan')
-        // Record scan complete
-        await redis.set(keys.scanCompletedKey, new Date().toString())
-        // Emit event
-        emit('initialScanComplete', {})
-      }
-      // Resolve deferred
-      deferred.done()
-      debug('Exit initial scan')
     }
 
     /** Stop the initial scan */
