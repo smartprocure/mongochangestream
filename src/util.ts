@@ -14,7 +14,7 @@ export const setDefaults = (keys: string[], val: any) => {
   return obj
 }
 
-export const removeDottedPaths = (omit: string[]) => {
+const removeDottedPaths = (omit: string[]) => {
   const dottedFields = omit.filter((x) => x.includes('.'))
   if (dottedFields.length) {
     return {
