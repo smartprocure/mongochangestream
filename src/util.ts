@@ -14,12 +14,37 @@ export const setDefaults = (keys: string[], val: any) => {
   return obj
 }
 
+export const removeDottedPaths = (omit: string[]) => {
+  const dottedFields = omit.filter((x) => x.includes('.'))
+  if (dottedFields.length) {
+    return {
+      $set: {
+        'updateDescription.updatedFields': {
+          $arrayToObject: {
+            $filter: {
+              input: { $objectToArray: '$updateDescription.updatedFields' },
+              cond: {
+                $regexMatch: {
+                  input: '$$this.k',
+                  regex: `^(?!${dottedFields.join('|')})`,
+                },
+              },
+            },
+          },
+        },
+      },
+    }
+  }
+}
+
 export const generatePipelineFromOmit = (omit: string[]) => {
   const fields = omit.flatMap((field) => [
     `fullDocument.${field}`,
     `updateDescription.updatedFields.${field}`,
   ])
-  return [{ $unset: fields }]
+  const dottedPathsStage = removeDottedPaths(omit)
+  const pipeline: any[] = [{ $unset: fields }]
+  return dottedPathsStage ? pipeline.concat([dottedPathsStage]) : pipeline
 }
 
 export const omitFields = (omitPaths: string[]) =>
