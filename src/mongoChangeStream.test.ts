@@ -341,7 +341,7 @@ test('should process records via change stream', async () => {
 
 test('should omit fields from change stream', async () => {
   const { coll, db } = await getConns()
-  const sync = await getSync({ omit: ['name'] })
+  const sync = await getSync({ omit: ['address.city'] })
   await initState(sync, db, coll)
 
   const documents: Document[] = []
@@ -349,7 +349,7 @@ test('should omit fields from change stream', async () => {
     for (const doc of docs) {
       await setTimeout(5)
       if (doc.operationType === 'update' && doc.fullDocument) {
-        documents.push(doc.fullDocument)
+        documents.push(doc)
       }
     }
   }
@@ -358,10 +358,17 @@ test('should omit fields from change stream', async () => {
   changeStream.start()
   await setTimeout(ms('1s'))
   // Update records
-  coll.updateMany({}, { $set: { name: 'unknown' } })
+  coll.updateMany(
+    {},
+    { $set: { name: 'unknown', 'address.city': 'San Diego' } }
+  )
   // Wait for the change stream events to be processed
   await setTimeout(ms('2s'))
-  assert.equal(documents[0].name, undefined)
+  assert.equal(documents[0].fullDocument.address.city, undefined)
+  assert.equal(
+    documents[0].updateDescription.updatedFields['address.city'],
+    undefined
+  )
   // Stop
   await changeStream.stop()
 })
