@@ -1,3 +1,7 @@
+# 0.43.1
+
+- Fix issue where omitting nested paths failed to remove the field from `updateDescription.updatedFields` do to dotted field name.
+
 # 0.43.0
 
 - Optionally pass an array of operation types (`insert`, `update`, ...) to `processChangeStream`.
