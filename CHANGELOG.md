@@ -1,3 +1,7 @@
+# 0.43.2
+
+- Escape period in regex.
+
 # 0.43.1
 
 - Fix issue where omitting nested paths failed to remove the field from `updateDescription.updatedFields` do to dotted field name.

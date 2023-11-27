@@ -43,7 +43,7 @@ test('should generate pipeline from omit with dotted fields', async () => {
                 $regexMatch: {
                   input: '$$this.k',
                   regex:
-                    '^(?!documents.agenda.parsedText|documents.agenda.contentType)',
+                    '^(?!documents\\.agenda\\.parsedText|documents\\.agenda\\.contentType)',
                 },
               },
             },
