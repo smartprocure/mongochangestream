@@ -1,3 +1,7 @@
+# 0.44.0
+
+- Bump dependencies.
+
 # 0.43.2
 
 - Escape period in regex.

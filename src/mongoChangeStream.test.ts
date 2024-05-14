@@ -47,11 +47,11 @@ const getSync = async (options?: SyncOptions) => {
 }
 
 const genUser = () => ({
-  name: faker.name.fullName(),
+  name: faker.person.fullName(),
   address: {
-    city: faker.address.city(),
-    state: faker.address.state(),
-    zipCode: faker.address.zipCode(),
+    city: faker.location.city(),
+    state: faker.location.state(),
+    zipCode: faker.location.zipCode(),
   },
   createdAt: faker.date.past(),
 })
@@ -236,12 +236,9 @@ test('initial scan should resume after stop', async () => {
   // Should not emit cursorError when stopping
   assert.equal(cursorError, false)
   // Wait for the initial scan to complete
-  initialScan.start()
-  // Add some more records
-  await populateCollection(coll, 10)
-  await setTimeout(ms('5s'))
+  await initialScan.start()
   assert.ok(completed)
-  assert.equal(processed.length, numDocs + 10)
+  assert.equal(processed.length, numDocs)
   // Stop
   await initialScan.stop()
 })

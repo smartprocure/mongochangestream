@@ -94,7 +94,7 @@ export function initSync<ExtendedEvents extends EventEmitter.ValidEventTypes>(
 
   /** Detect if resync flag is set */
   const detectResync = (resyncCheckInterval = ms('1m')) => {
-    let resyncTimer: NodeJS.Timer
+    let resyncTimer: ReturnType<typeof setInterval>
     const state = fsm(simpleStateTransistions, 'stopped', {
       name: 'detectResync',
       onStateChange: emitStateChange,
@@ -458,7 +458,7 @@ export function initSync<ExtendedEvents extends EventEmitter.ValidEventTypes>(
       onStateChange: emitStateChange,
     })
 
-    let timer: NodeJS.Timer
+    let timer: ReturnType<typeof setInterval>
     // Check for a cached schema
     let previousSchema = await getCachedCollectionSchema().then((schema) => {
       if (schema) {
@@ -474,9 +474,8 @@ export function initSync<ExtendedEvents extends EventEmitter.ValidEventTypes>(
     debug('Previous schema %O', previousSchema)
     // Check for a schema change
     const checkForSchemaChange = async () => {
-      const currentSchema = await getCollectionSchema(db).then(
-        maybeRemoveMetadata
-      )
+      const currentSchema =
+        await getCollectionSchema(db).then(maybeRemoveMetadata)
       // Schemas are no longer the same
       if (!_.isEqual(currentSchema, previousSchema)) {
         debug('Schema change detected %O', currentSchema)
