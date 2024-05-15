@@ -65,5 +65,4 @@ dist/
 
 *.un~
 
-run-tests
-run-tests-only
+.env
