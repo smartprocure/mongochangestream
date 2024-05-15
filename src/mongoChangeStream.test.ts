@@ -1,7 +1,6 @@
 /**
  * To run add a local .env file with MONGO_CONN
  */
-import 'dotenv/config'
 import _ from 'lodash/fp.js'
 import { describe, test } from 'node:test'
 import assert from 'node:assert'

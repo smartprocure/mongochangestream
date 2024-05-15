@@ -16,8 +16,8 @@
     "build:watch": "tsc --watch",
     "lint": "eslint src/**",
     "fmt": "prettier --ignore-path .gitignore --write './'",
-    "test": "node --test --test-force-exit",
-    "test:only": "DEBUG=* node --test --test-only --test-force-exit"
+    "test": "node --env-file=.env --test --test-force-exit",
+    "test:only": "DEBUG=* node --env-file=.env --test --test-only --test-force-exit"
   },
   "keywords": [
     "mongodb",
@@ -44,7 +44,6 @@
     "@types/lodash": "^4.17.1",
     "@types/node": "^20.12.12",
     "@typescript-eslint/eslint-plugin": "^7.9.0",
-    "dotenv": "^16.4.5",
     "prettier": "^3.2.5",
     "typescript": "^5.4.5"
   },
