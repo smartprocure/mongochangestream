@@ -7,14 +7,14 @@
   "types": "dist/index.d.ts",
   "repository": "git://github.com/smartprocure/mongochangestream.git",
   "scripts": {
-    "prepare": "npm run lint && npm run build",
+    "prepare": "npm run lint && npm run test && npm run build",
     "clean": "rm -rf dist",
     "build": "npm run fmt && npm run clean && tsc --declaration --project ./tsconfig-prod.json",
     "build:watch": "tsc --watch",
     "lint": "eslint src/**",
     "fmt": "prettier --ignore-path .gitignore --write './'",
-    "test": "node --test",
-    "test:only": "DEBUG=* node --test --test-only"
+    "test": "node --test --test-force-exit",
+    "test:only": "DEBUG=* node --test --test-only --test-force-exit"
   },
   "keywords": [
     "mongodb",
