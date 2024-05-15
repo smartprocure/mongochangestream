@@ -1,6 +1,7 @@
 /**
- * To run: MONGO_CONN="[conn string]" node dist/mongoChangeStream.test.js
+ * To run add a local .env file with MONGO_CONN
  */
+import 'dotenv/config'
 import _ from 'lodash/fp.js'
 import { test } from 'node:test'
 import assert from 'node:assert'
@@ -214,10 +215,10 @@ test('initial scan should resume after stop', async () => {
 
   const processed = []
   const processRecords = async (docs: ChangeStreamInsertDocument[]) => {
-    await setTimeout(10)
+    await setTimeout(15)
     processed.push(...docs)
   }
-  const scanOptions = { batchSize: 50 }
+  const scanOptions = { batchSize: 25 }
   const initialScan = await sync.runInitialScan(processRecords, scanOptions)
   let completed = false
   sync.emitter.on('initialScanComplete', () => {
@@ -233,6 +234,8 @@ test('initial scan should resume after stop', async () => {
   await setTimeout(500)
   // Stop the initial scan
   await initialScan.stop()
+  // Only a subset of the documents were processed
+  assert.ok(processed.length < numDocs)
   // Should not emit cursorError when stopping
   assert.equal(cursorError, false)
   // Wait for the initial scan to complete
@@ -437,7 +440,7 @@ test('change stream should resume properly', async () => {
   // Change stream
   const processRecords = async (docs: ChangeStreamDocument[]) => {
     for (const doc of docs) {
-      await setTimeout(5)
+      await setTimeout(8)
       processed.push(doc)
     }
   }
@@ -449,12 +452,14 @@ test('change stream should resume properly', async () => {
   coll.updateMany({}, { $set: { createdAt: new Date('2022-01-02') } })
   // Wait for some change stream events to be processed
   await setTimeout(ms('2s'))
+  // Only a subset of the documents were processed
+  assert.ok(processed.length < numDocs)
   // Stop
   await changeStream.stop()
   // Resume change stream
   changeStream.start()
   // Wait for all documents to be processed
-  await setTimeout(ms('10s'))
+  await setTimeout(ms('8s'))
   // All change stream docs were processed
   assert.equal(processed.length, numDocs)
   await changeStream.stop()
@@ -577,6 +582,7 @@ test('starting change stream is idempotent', async () => {
   // Start twice
   changeStream.start()
   changeStream.start()
+  await setTimeout(ms('1s'))
   await changeStream.stop()
 })
 

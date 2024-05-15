@@ -2,7 +2,7 @@ import { test } from 'node:test'
 import assert from 'node:assert'
 import { generatePipelineFromOmit } from './util.js'
 
-test('should generate pipeline from omit with no dotted fields', async () => {
+test('should generate pipeline from omit with no dotted fields', () => {
   const pipeline = generatePipelineFromOmit(['documents', 'createdAt'])
   assert.deepEqual(pipeline, [
     {
@@ -16,7 +16,7 @@ test('should generate pipeline from omit with no dotted fields', async () => {
   ])
 })
 
-test('should generate pipeline from omit with dotted fields', async () => {
+test('should generate pipeline from omit with dotted fields', () => {
   const pipeline = generatePipelineFromOmit([
     'documents.agenda.parsedText',
     'documents.agenda.contentType',
