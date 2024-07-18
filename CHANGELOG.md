@@ -1,6 +1,8 @@
 # 0.44.0
 
+- Added `uniqueId` option to allow the same collection to be synced in parallel.
 - Bump dependencies.
+- Deprecated option `shouldRemoveMetadata` in `detectSchemaChange`. Prefer `shouldRemoveUnusedFields`.
 
 # 0.43.2
 

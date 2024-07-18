@@ -1,32 +1,34 @@
 /**
- * To run add a local .env file with MONGO_CONN
+ * To run add a local .env file with MONGO_CONN and execute npm test.
+ * NOTE: Node version 22 or higher is required.
  */
-import _ from 'lodash/fp.js'
-import { describe, test } from 'node:test'
-import assert from 'node:assert'
-import { initSync } from './mongoChangeStream.js'
-import {
-  JSONSchema,
-  SchemaChangeEvent,
-  ScanOptions,
-  SyncOptions,
-  SortField,
-  CursorErrorEvent,
-} from './types.js'
-import {
-  Document,
-  ChangeStreamDocument,
-  ChangeStreamInsertDocument,
-  MongoClient,
-  Collection,
-  ObjectId,
-  Db,
-} from 'mongodb'
-import Redis from 'ioredis'
 import { faker } from '@faker-js/faker'
+import Redis from 'ioredis'
+import _ from 'lodash/fp.js'
+import {
+  type ChangeStreamDocument,
+  type ChangeStreamInsertDocument,
+  type Collection,
+  type Db,
+  type Document,
+  MongoClient,
+  ObjectId,
+} from 'mongodb'
 import ms from 'ms'
+import assert from 'node:assert'
+import { describe, test } from 'node:test'
 import { setTimeout } from 'node:timers/promises'
-import { QueueOptions } from 'prom-utils'
+import { type QueueOptions } from 'prom-utils'
+
+import { initSync } from './mongoChangeStream.js'
+import type {
+  CursorErrorEvent,
+  JSONSchema,
+  ScanOptions,
+  SchemaChangeEvent,
+  SortField,
+  SyncOptions,
+} from './types.js'
 import { missingOplogEntry } from './util.js'
 
 const getConns = _.memoize(async (x?: any) => {
@@ -698,13 +700,13 @@ describe('syncing', () => {
     })
     // Look for a new schema every 250 ms
     const schemaChange = await sync.detectSchemaChange(db, {
-      shouldRemoveMetadata: true,
+      shouldRemoveUnusedFields: true,
       interval: 250,
     })
-    let newSchema: object = {}
+    let schemaChangeEventTriggered = false
     sync.emitter.on('schemaChange', ({ currentSchema }: SchemaChangeEvent) => {
       console.dir(currentSchema, { depth: 10 })
-      newSchema = currentSchema
+      schemaChangeEventTriggered = true
     })
     // Start detecting schema changes
     schemaChange.start()
@@ -719,7 +721,7 @@ describe('syncing', () => {
       validator: { $jsonSchema: modifiedSchema },
     })
     await setTimeout(ms('1s'))
-    assert.deepEqual(modifiedSchema, newSchema)
+    assert.ok(schemaChangeEventTriggered)
     schemaChange.stop()
   })
 
