@@ -185,6 +185,38 @@ describe('syncing', () => {
     await initialScan.stop()
   })
 
+  test('should allow parallel syncing via uniqueId option', async () => {
+    const { coll, db } = await getConns()
+    const sync = await getSync()
+    const sync2 = await getSync({ uniqueId: 'v2' })
+    await initState(sync, db, coll)
+    // Clear syncing state
+    await sync2.reset()
+
+    const processed: { v1: any[]; v2: any[] } = { v1: [], v2: [] }
+    const processRecords =
+      (version: 'v1' | 'v2') => async (docs: ChangeStreamInsertDocument[]) => {
+        await setTimeout(50)
+        processed[version].push(...docs)
+      }
+    const scanOptions = { batchSize: 100 }
+    const initialScan = await sync.runInitialScan(
+      processRecords('v1'),
+      scanOptions
+    )
+    const initialScan2 = await sync2.runInitialScan(
+      processRecords('v2'),
+      scanOptions
+    )
+    // Wait for initial scan to complete
+    await Promise.all([initialScan.start(), initialScan2.start()])
+    // Assertions
+    assert.equal(processed.v1.length, numDocs)
+    assert.equal(processed.v2.length, numDocs)
+    // Stop
+    await Promise.all([initialScan.stop(), initialScan2.stop()])
+  })
+
   test('should exit cleanly if initial scan is already complete', async () => {
     const { coll, db, redis } = await getConns()
     const sync = await getSync()
