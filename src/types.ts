@@ -27,11 +27,11 @@ export interface SyncOptions {
   /** Field paths to omit. */
   omit?: string[]
   /**
-  * Added to all Redis keys to allow the same collection
-  * to be synced in parallel. Otherwise, the Redis keys
-  * would be the same for a given collection and parallel
-  * syncing jobs would overwrite each other.
-  */
+   * Added to all Redis keys to allow the same collection
+   * to be synced in parallel. Otherwise, the Redis keys
+   * would be the same for a given collection and parallel
+   * syncing jobs would overwrite each other.
+   */
   uniqueId?: string
 }
 
@@ -62,10 +62,10 @@ export interface ChangeOptions {
   /** @deprecated Use shouldRemoveUnusedFields instead.*/
   shouldRemoveMetadata?: boolean
   /**
-  * Remove fields that are not used when converting the schema
-  * in a downstream library like mongo2elastic or mongo2crate.
-  * Preserves bsonType, properties, additionalProperties, items, and enum.
-  */
+   * Remove fields that are not used when converting the schema
+   * in a downstream library like mongo2elastic or mongo2crate.
+   * Preserves bsonType, properties, additionalProperties, items, and enum.
+   */
   shouldRemoveUnusedFields?: boolean
 }
 
