@@ -81,6 +81,16 @@ describe('util', () => {
               { bsonType: 'string', const: 'bar' },
             ],
           },
+          c: {
+            bsonType: 'object',
+            additionalProperties: true,
+            properties: {
+              d: {
+                bsonType: 'number',
+                description: 'A number',
+              },
+            },
+          },
         },
       }
       removeUnusedFields(schema)
@@ -97,6 +107,15 @@ describe('util', () => {
           b: {
             bsonType: 'string',
             enum: ['foo', 'bar'],
+          },
+          c: {
+            bsonType: 'object',
+            additionalProperties: true,
+            properties: {
+              d: {
+                bsonType: 'number',
+              },
+            },
           },
         },
       })
