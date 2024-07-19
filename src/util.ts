@@ -1,8 +1,9 @@
-import { Collection, MongoServerError } from 'mongodb'
-import _ from 'lodash/fp.js'
-import { Node, walkie } from 'obj-walker'
-import { Cursor, CursorError, JSONSchema } from './types.js'
 import _debug from 'debug'
+import _ from 'lodash/fp.js'
+import { type Collection, MongoServerError } from 'mongodb'
+import { type Node, walkEach } from 'obj-walker'
+
+import type { Cursor, CursorError, JSONSchema } from './types.js'
 
 const debug = _debug('mongochangestream')
 
@@ -50,7 +51,7 @@ export const generatePipelineFromOmit = (omit: string[]) => {
 }
 
 export const omitFields = (omitPaths: string[]) =>
-  _.omitBy((val, key) =>
+  _.omitBy((_val, key) =>
     _.find((omitPath) => _.startsWith(`${omitPath}.`, key), omitPaths)
   )
 
@@ -63,19 +64,29 @@ export const getCollectionKey = (collection: Collection) =>
 export const traverseSchema = (x: JSONSchema) =>
   x.properties || (x.items && { _items: x.items })
 
+const usedSchemaFields = [
+  'bsonType',
+  'properties',
+  'additionalProperties',
+  'items',
+  'enum',
+]
+
 /**
- * Remove title and description from a JSON schema.
+ * Remove unused schema fields
  */
-export const removeMetadata = (schema: JSONSchema): JSONSchema => {
+export const removeUnusedFields = (schema: JSONSchema): JSONSchema => {
   const walkFn = ({ val }: Node) => {
-    if ('title' in val) {
-      delete val.title
-    }
-    if ('description' in val) {
-      delete val.description
+    for (const key in val) {
+      if (!usedSchemaFields.includes(key)) {
+        delete val[key]
+      }
     }
   }
-  return walkie(schema, walkFn, { traverse: traverseSchema })
+  return walkEach(schema, walkFn, {
+    traverse: traverseSchema,
+    modifyInPlace: true,
+  })
 }
 
 export function when<T, R>(condition: any, fn: (x: T) => R) {

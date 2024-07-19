@@ -22,9 +22,9 @@ DEBUG=mongochangestream node myfile.js
 ```
 
 ```typescript
-import { ChangeStreamDocument, MongoClient } from 'mongodb'
 import { default as Redis } from 'ioredis'
 import { initSync } from 'mongochangestream'
+import { ChangeStreamDocument, MongoClient } from 'mongodb'
 
 const redis = new Redis()
 

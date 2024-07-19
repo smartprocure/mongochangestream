@@ -1,41 +1,42 @@
+import _debug from 'debug'
+import EventEmitter from 'eventemitter3'
+import type { Redis } from 'ioredis'
 import _ from 'lodash/fp.js'
 import {
-  ChangeStreamDocument,
-  ChangeStreamInsertDocument,
-  Collection,
+  type ChangeStream,
+  type ChangeStreamDocument,
+  type ChangeStreamInsertDocument,
+  type Collection,
+  type Db,
   ObjectId,
-  Db,
-  ChangeStream,
 } from 'mongodb'
 import * as mongodb from 'mongodb'
+import ms from 'ms'
+import { batchQueue, defer, type Deferred, type QueueOptions } from 'prom-utils'
+import { fsm, type StateTransitions } from 'simple-machines'
+
 import {
+  ChangeOptions,
+  ChangeStreamOptions,
   Events,
-  SyncOptions,
+  JSONSchema,
   ProcessChangeStreamRecords,
   ProcessInitialScanRecords,
   ScanOptions,
-  ChangeOptions,
-  ChangeStreamOptions,
-  JSONSchema,
-  State,
   SimpleState,
   SortField,
+  State,
+  SyncOptions,
 } from './types.js'
-import _debug from 'debug'
-import type { Redis } from 'ioredis'
-import { batchQueue, defer, Deferred, QueueOptions } from 'prom-utils'
 import {
   generatePipelineFromOmit,
   getCollectionKey,
   omitFieldForUpdate,
-  removeMetadata,
+  removeUnusedFields,
   safelyCheckNext,
   setDefaults,
   when,
 } from './util.js'
-import EventEmitter from 'eventemitter3'
-import ms from 'ms'
-import { fsm, StateTransitions } from 'simple-machines'
 
 const debug = _debug('mongochangestream')
 
@@ -44,9 +45,10 @@ const keyPrefix = 'mongoChangeStream'
 /**
  * Get Redis keys used for the collection.
  */
-export const getKeys = (collection: Collection) => {
+export const getKeys = (collection: Collection, options: SyncOptions) => {
   const collectionKey = getCollectionKey(collection)
-  const collectionPrefix = `${keyPrefix}:${collectionKey}`
+  const uniqueId = options.uniqueId ? `:${options.uniqueId}` : ''
+  const collectionPrefix = `${keyPrefix}:${collectionKey}${uniqueId}`
   const scanCompletedKey = `${collectionPrefix}:initialScanCompletedOn`
   const lastScanIdKey = `${collectionPrefix}:lastScanId`
   const changeStreamTokenKey = `${collectionPrefix}:changeStreamToken`
@@ -84,7 +86,7 @@ export function initSync<ExtendedEvents extends EventEmitter.ValidEventTypes>(
   collection: Collection,
   options: SyncOptions = {}
 ) {
-  const keys = getKeys(collection)
+  const keys = getKeys(collection, options)
   const { omit } = options
   const emitter = new EventEmitter<Events | ExtendedEvents>()
   const emit = (event: Events, data: object) => {
@@ -451,8 +453,12 @@ export function initSync<ExtendedEvents extends EventEmitter.ValidEventTypes>(
 
   const detectSchemaChange = async (db: Db, options: ChangeOptions = {}) => {
     const interval = options.interval || ms('1m')
-    const shouldRemoveMetadata = options.shouldRemoveMetadata
-    const maybeRemoveMetadata = when(shouldRemoveMetadata, removeMetadata)
+    const shouldRemoveUnusedFields =
+      options.shouldRemoveUnusedFields || options.shouldRemoveMetadata
+    const maybeRemoveUnusedFields = when(
+      shouldRemoveUnusedFields,
+      removeUnusedFields
+    )
     const state = fsm(simpleStateTransistions, 'stopped', {
       name: 'detectSchemaChange',
       onStateChange: emitStateChange,
@@ -462,11 +468,11 @@ export function initSync<ExtendedEvents extends EventEmitter.ValidEventTypes>(
     // Check for a cached schema
     let previousSchema = await getCachedCollectionSchema().then((schema) => {
       if (schema) {
-        return maybeRemoveMetadata(schema)
+        return maybeRemoveUnusedFields(schema)
       }
     })
     if (!previousSchema) {
-      const schema = await getCollectionSchema(db).then(maybeRemoveMetadata)
+      const schema = await getCollectionSchema(db).then(maybeRemoveUnusedFields)
       // Persist schema
       await redis.setnx(keys.schemaKey, JSON.stringify(schema))
       previousSchema = schema
@@ -474,8 +480,9 @@ export function initSync<ExtendedEvents extends EventEmitter.ValidEventTypes>(
     debug('Previous schema %O', previousSchema)
     // Check for a schema change
     const checkForSchemaChange = async () => {
-      const currentSchema =
-        await getCollectionSchema(db).then(maybeRemoveMetadata)
+      const currentSchema = await getCollectionSchema(db).then(
+        maybeRemoveUnusedFields
+      )
       // Schemas are no longer the same
       if (!_.isEqual(currentSchema, previousSchema)) {
         debug('Schema change detected %O', currentSchema)
