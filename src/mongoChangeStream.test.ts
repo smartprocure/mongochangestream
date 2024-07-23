@@ -451,7 +451,7 @@ describe('syncing', () => {
     assert.equal(cursorError, false)
   })
 
-  test('should omit fields from change stream', async () => {
+  test('should omit fields from change stream - dotted paths', async () => {
     const { coll, db } = await getConns()
     // address.geo is a path prefix relative to the paths being updated below
     const sync = await getSync({ omit: ['address.city', 'address.geo'] })
@@ -494,6 +494,46 @@ describe('syncing', () => {
         undefined
       )
     }
+    // Stop
+    await changeStream.stop()
+  })
+
+  test('should omit fields from change stream - object', async () => {
+    const { coll, db } = await getConns()
+    // address.geo is a path prefix relative to the paths being updated below
+    const sync = await getSync({ omit: ['address'] })
+    await initState(sync, db, coll)
+
+    const documents: Document[] = []
+    const processRecords = async (docs: ChangeStreamDocument[]) => {
+      for (const doc of docs) {
+        await setTimeout(5)
+        if (doc.operationType === 'update' && doc.fullDocument) {
+          documents.push(doc)
+        }
+      }
+    }
+    const changeStream = await sync.processChangeStream(processRecords)
+    // Start
+    changeStream.start()
+    await setTimeout(ms('1s'))
+    // Update records
+    coll.updateMany(
+      {},
+      {
+        $set: {
+          address: { city: 'San Diego' },
+        },
+      }
+    )
+    // Wait for the change stream events to be processed
+    await setTimeout(ms('2s'))
+    // Assertions
+    assert.equal(documents[0].fullDocument.address, undefined)
+    assert.equal(
+      documents[0].updateDescription.updatedFields.address,
+      undefined
+    )
     // Stop
     await changeStream.stop()
   })
