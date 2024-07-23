@@ -16,12 +16,24 @@ export const setDefaults = (keys: string[], val: any) => {
 }
 
 /**
- * Remove paths in updateDescription.updatedFields where the path
- * starts with the path prefix.
+ * Dotted path updates like { $set: {'a.b.c': 'foo'} } result in the following:
+ * ```ts
+ * {
+ *   updatedDescription: {
+ *     updateFields: {
+ *       'a.b.c': 'foo'
+ *     }
+ *   }
+ * }
+ * ```
+ * Therefore, to remove 'a.b' we have to convert the `updateFields`
+ * object to an array, filter the array with a regex, and convert
+ * the array back to an object.
  */
 const removeDottedPaths = (omit: string[]) => {
   const dottedFields = omit
     .filter((x) => x.includes('.'))
+    // Escape periods
     .map((x) => x.replaceAll('.', '\\.'))
   if (dottedFields.length) {
     return {

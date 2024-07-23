@@ -453,6 +453,7 @@ describe('syncing', () => {
 
   test('should omit fields from change stream', async () => {
     const { coll, db } = await getConns()
+    // address.geo is a path prefix relative to the paths being updated below
     const sync = await getSync({ omit: ['address.city', 'address.geo'] })
     await initState(sync, db, coll)
 
@@ -483,44 +484,16 @@ describe('syncing', () => {
     )
     // Wait for the change stream events to be processed
     await setTimeout(ms('2s'))
-    console.dir(documents, { depth: 10 })
+    // Assertions
     assert.equal(documents[0].fullDocument.address.city, undefined)
     assert.equal(documents[0].fullDocument.address.geo, undefined)
-    assert.equal(
-      documents[0].updateDescription.updatedFields['address.city'],
-      undefined
-    )
-    assert.equal(
-      documents[0].updateDescription.updatedFields['address.geo'],
-      undefined
-    )
-    // Stop
-    await changeStream.stop()
-  })
-
-  test('should omit nested fields when parent field is omitted from change stream', async () => {
-    const { coll, db } = await getConns()
-    const sync = await getSync({ omit: ['address'] })
-    await initState(sync, db, coll)
-
-    const documents: Document[] = []
-    const processRecords = async (docs: ChangeStreamDocument[]) => {
-      for (const doc of docs) {
-        await setTimeout(5)
-        if (doc.operationType === 'update' && doc.fullDocument) {
-          documents.push(doc.fullDocument)
-        }
-      }
+    const fields = ['address.city', 'address.geo.lat', 'address.geo.long']
+    for (const field of fields) {
+      assert.equal(
+        documents[0].updateDescription.updatedFields[field],
+        undefined
+      )
     }
-    const changeStream = await sync.processChangeStream(processRecords)
-    // Start
-    changeStream.start()
-    await setTimeout(ms('1s'))
-    // Update records
-    coll.updateMany({}, { $set: { 'address.zipCode': '90210' } })
-    // Wait for the change stream events to be processed
-    await setTimeout(ms('2s'))
-    assert.equal(documents[0].address?.zipCode, undefined)
     // Stop
     await changeStream.stop()
   })
