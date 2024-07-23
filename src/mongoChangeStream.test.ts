@@ -54,6 +54,10 @@ const genUser = () => ({
     city: faker.location.city(),
     state: faker.location.state(),
     zipCode: faker.location.zipCode(),
+    geo: {
+      lat: faker.location.latitude(),
+      long: faker.location.longitude(),
+    },
   },
   createdAt: faker.date.past(),
 })
@@ -71,6 +75,17 @@ const schema: JSONSchema = {
         city: { bsonType: 'string' },
         state: { bsonType: 'string' },
         zipCode: { bsonType: 'string' },
+        geo: {
+          bsonType: 'object',
+          properties: {
+            lat: {
+              bsonType: 'number',
+            },
+            long: {
+              bsonType: 'number',
+            },
+          },
+        },
       },
     },
     createdAt: { bsonType: 'date' },
@@ -260,7 +275,7 @@ describe('syncing', () => {
 
   test('should omit fields from initial scan', async () => {
     const { coll, db } = await getConns()
-    const sync = await getSync({ omit: ['name'] })
+    const sync = await getSync({ omit: ['address.city', 'address.geo'] })
     await initState(sync, db, coll)
 
     const documents: Document[] = []
@@ -272,7 +287,8 @@ describe('syncing', () => {
     const initialScan = await sync.runInitialScan(processRecords, scanOptions)
     // Wait for initial scan to complete
     await initialScan.start()
-    assert.equal(documents[0].name, undefined)
+    assert.equal(documents[0]?.address?.city, undefined)
+    assert.equal(documents[0]?.address?.geo, undefined)
     // Stop
     await initialScan.stop()
   })
@@ -437,7 +453,7 @@ describe('syncing', () => {
 
   test('should omit fields from change stream', async () => {
     const { coll, db } = await getConns()
-    const sync = await getSync({ omit: ['address.city'] })
+    const sync = await getSync({ omit: ['address.city', 'address.geo'] })
     await initState(sync, db, coll)
 
     const documents: Document[] = []
@@ -456,13 +472,26 @@ describe('syncing', () => {
     // Update records
     coll.updateMany(
       {},
-      { $set: { name: 'unknown', 'address.city': 'San Diego' } }
+      {
+        $set: {
+          name: 'unknown',
+          'address.city': 'San Diego',
+          'address.geo.lat': 24,
+          'address.geo.long': 25,
+        },
+      }
     )
     // Wait for the change stream events to be processed
     await setTimeout(ms('2s'))
+    console.dir(documents, { depth: 10 })
     assert.equal(documents[0].fullDocument.address.city, undefined)
+    assert.equal(documents[0].fullDocument.address.geo, undefined)
     assert.equal(
       documents[0].updateDescription.updatedFields['address.city'],
+      undefined
+    )
+    assert.equal(
+      documents[0].updateDescription.updatedFields['address.geo'],
       undefined
     )
     // Stop

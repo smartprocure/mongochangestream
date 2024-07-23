@@ -15,6 +15,10 @@ export const setDefaults = (keys: string[], val: any) => {
   return obj
 }
 
+/**
+ * Remove paths in updateDescription.updatedFields where the path
+ * starts with the path prefix.
+ */
 const removeDottedPaths = (omit: string[]) => {
   const dottedFields = omit
     .filter((x) => x.includes('.'))
