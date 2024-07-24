@@ -1,3 +1,7 @@
+# 0.46.0
+
+- Bumped peer dependencies for `ioredis` and `mongodb`.
+
 # 0.45.0
 
 - Added `uniqueId` option to allow the same collection to be synced in parallel.
