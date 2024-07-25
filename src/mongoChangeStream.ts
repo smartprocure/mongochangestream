@@ -33,7 +33,7 @@ import {
 import {
   generatePipelineFromOmit,
   getCollectionKey,
-  omitFieldForUpdate,
+  omitUpdatedFields,
   removeUnusedFields,
   setDefaults,
   when,
@@ -387,7 +387,7 @@ export function initSync<ExtendedEvents extends EventEmitter.ValidEventTypes>(
         // Omit nested fields that are not handled by $unset.
         // For example, if 'a' was omitted then 'a.b.c' should be omitted.
         if (event.operationType === 'update' && omit) {
-          event = omitFieldForUpdate(omit)(event) as ChangeStreamDocument
+          event = omitUpdatedFields(omit, event) as ChangeStreamDocument
         }
         await queue.enqueue(event)
       }

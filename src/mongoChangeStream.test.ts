@@ -425,7 +425,7 @@ describe('syncing', () => {
     assert.ok(documents[0].cityState)
   })
 
-  test('should process records via change stream', async () => {
+  test('should process records via change stream', { only: true }, async () => {
     const { coll, db } = await getConns()
     const sync = await getSync()
     await initState(sync, db, coll)
@@ -434,7 +434,7 @@ describe('syncing', () => {
     sync.emitter.on('cursorError', () => {
       cursorError = true
     })
-    const processed = []
+    const processed: any[] = []
     const processRecords = async (docs: ChangeStreamDocument[]) => {
       for (const doc of docs) {
         await setTimeout(5)
@@ -446,7 +446,13 @@ describe('syncing', () => {
     changeStream.start()
     await setTimeout(ms('1s'))
     // Update records
-    coll.updateMany({}, { $set: { createdAt: new Date('2022-01-01') } })
+    coll.updateMany(
+      {},
+      {
+        $set: { createdAt: new Date('2022-01-01') },
+        $unset: { 'address.city': '', 'address.geo.lat': '' },
+      }
+    )
     // Wait for the change stream events to be processed
     await setTimeout(ms('10s'))
     assert.equal(processed.length, numDocs)
@@ -499,6 +505,52 @@ describe('syncing', () => {
         undefined
       )
     }
+    // Stop
+    await changeStream.stop()
+  })
+
+  test('should omit fields from change stream - nested dotted path', async () => {
+    const { coll, db } = await getConns()
+    // address.geo is a path prefix relative to the paths being updated below
+    const sync = await getSync({ omit: ['address.geo.lat'] })
+    await initState(sync, db, coll)
+
+    const documents: Document[] = []
+    const processRecords = async (docs: ChangeStreamDocument[]) => {
+      for (const doc of docs) {
+        await setTimeout(5)
+        if (doc.operationType === 'update' && doc.fullDocument) {
+          documents.push(doc)
+        }
+      }
+    }
+    const changeStream = await sync.processChangeStream(processRecords)
+    // Start
+    changeStream.start()
+    await setTimeout(ms('1s'))
+    // Update record
+    coll.updateMany({}, [
+      {
+        $set: {
+          'address.geo.lat': 24,
+          'address.geo.long': 25,
+        },
+      },
+    ])
+    // Wait for the change stream events to be processed
+    await setTimeout(ms('2s'))
+    // console.dir(documents, { depth: 10 })
+    // Assertions
+    assert.equal(documents[0].fullDocument.address.geo.long, 25)
+    assert.equal(documents[0].fullDocument.address.geo.lat, undefined)
+    assert.equal(
+      documents[0].updateDescription.updatedFields.address.geo.long,
+      25
+    )
+    assert.equal(
+      documents[0].updateDescription.updatedFields.address.geo.lat,
+      undefined
+    )
     // Stop
     await changeStream.stop()
   })

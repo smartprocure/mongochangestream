@@ -1,6 +1,11 @@
+import { unset } from 'lodash'
 import _ from 'lodash/fp.js'
-import { type Collection, MongoServerError } from 'mongodb'
-import { type Node, walkEach } from 'obj-walker'
+import {
+  type ChangeStreamUpdateDocument,
+  type Collection,
+  MongoServerError,
+} from 'mongodb'
+import { type Node, unflatten, walkEach } from 'obj-walker'
 
 import type { CursorError, JSONSchema } from './types.js'
 
@@ -10,6 +15,14 @@ export const setDefaults = (keys: string[], val: any) => {
     obj[key] = val
   }
   return obj
+}
+
+export const generatePipelineFromOmit = (omit: string[]) => {
+  const fields = omit.flatMap((field) => [
+    `fullDocument.${field}`,
+    `updateDescription.updatedFields.${field}`,
+  ])
+  return [{ $unset: fields }]
 }
 
 /**
@@ -23,53 +36,22 @@ export const setDefaults = (keys: string[], val: any) => {
  *   }
  * }
  * ```
- * Therefore, to remove 'a.b' we have to convert the `updateFields`
- * object to an array, filter the array with a regex, and convert
- * the array back to an object.
+ * Therefore, to remove 'a.b' we have to unflatten the `updateFields` object
+ * and unset the omitted paths.
  */
-const removeDottedPaths = (omit: string[]) => {
-  const dottedFields = omit
-    .filter((x) => x.includes('.'))
-    // Escape periods
-    .map((x) => x.replaceAll('.', '\\.'))
-  if (dottedFields.length) {
-    return {
-      $set: {
-        'updateDescription.updatedFields': {
-          $arrayToObject: {
-            $filter: {
-              input: { $objectToArray: '$updateDescription.updatedFields' },
-              cond: {
-                $regexMatch: {
-                  input: '$$this.k',
-                  regex: `^(?!${dottedFields.join('|')})`,
-                },
-              },
-            },
-          },
-        },
-      },
+export const omitUpdatedFields = (
+  paths: string[],
+  event: ChangeStreamUpdateDocument
+): ChangeStreamUpdateDocument => {
+  if (event.updateDescription.updatedFields) {
+    const nestedUpdatedFields = unflatten(event.updateDescription.updatedFields)
+    for (const path of paths) {
+      unset(nestedUpdatedFields, path)
     }
+    return _.set('updateDescription.updatedFields', nestedUpdatedFields, event)
   }
+  return event
 }
-
-export const generatePipelineFromOmit = (omit: string[]) => {
-  const fields = omit.flatMap((field) => [
-    `fullDocument.${field}`,
-    `updateDescription.updatedFields.${field}`,
-  ])
-  const dottedPathsStage = removeDottedPaths(omit)
-  const pipeline: any[] = [{ $unset: fields }]
-  return dottedPathsStage ? pipeline.concat([dottedPathsStage]) : pipeline
-}
-
-export const omitFields = (omitPaths: string[]) =>
-  _.omitBy((_val, key) =>
-    _.find((omitPath) => _.startsWith(`${omitPath}.`, key), omitPaths)
-  )
-
-export const omitFieldForUpdate = (omitPaths: string[]) =>
-  _.update('updateDescription.updatedFields', omitFields(omitPaths))
 
 export const getCollectionKey = (collection: Collection) =>
   `${collection.dbName}:${collection.collectionName}`

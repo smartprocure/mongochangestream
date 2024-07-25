@@ -17,7 +17,7 @@
     "lint": "eslint src/**",
     "fmt": "prettier --ignore-path .gitignore --write './'",
     "test": "node --env-file=.env --test --test-force-exit",
-    "test:only": "DEBUG=* node --env-file=.env --test --test-only --test-force-exit"
+    "test:only": "DEBUG=* DEBUG_DEPTH=10 node --env-file=.env --test --test-only --test-force-exit"
   },
   "keywords": [
     "mongodb",
@@ -65,12 +65,8 @@
     "semi": false,
     "singleQuote": true,
     "trailingComma": "es5",
-    "plugins": [
-      "@trivago/prettier-plugin-sort-imports"
-    ],
-    "importOrder": [
-      "^[./]"
-    ],
+    "plugins": ["@trivago/prettier-plugin-sort-imports"],
+    "importOrder": ["^[./]"],
     "importOrderSortSpecifiers": true,
     "importOrderCaseInsensitive": true,
     "importOrderSeparation": true

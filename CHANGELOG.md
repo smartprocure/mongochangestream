@@ -1,6 +1,7 @@
 # 0.48.0
 
 - Fixed bug where `processChangeStream` exits prematurely.
+- Fixed bug when omitting an updated nested field.
 
 # 0.47.0
 
