@@ -425,7 +425,7 @@ describe('syncing', () => {
     assert.ok(documents[0].cityState)
   })
 
-  test('should process records via change stream', { only: true }, async () => {
+  test('should process records via change stream', async () => {
     const { coll, db } = await getConns()
     const sync = await getSync()
     await initState(sync, db, coll)
