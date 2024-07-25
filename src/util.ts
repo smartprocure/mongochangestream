@@ -1,11 +1,10 @@
-import { unset } from 'lodash'
-import _ from 'lodash/fp.js'
+import { set } from 'lodash'
 import {
   type ChangeStreamUpdateDocument,
   type Collection,
   MongoServerError,
 } from 'mongodb'
-import { type Node, unflatten, walkEach } from 'obj-walker'
+import { map, type Node, walkEach } from 'obj-walker'
 
 import type { CursorError, JSONSchema } from './types.js'
 
@@ -39,18 +38,32 @@ export const generatePipelineFromOmit = (omit: string[]) => {
  * Therefore, to remove 'a.b' we have to unflatten the `updateFields` object
  * and unset the omitted paths.
  */
-export const omitUpdatedFields = (
-  paths: string[],
+export const omitFieldsForUpdate = (
+  omittedPaths: string[],
   event: ChangeStreamUpdateDocument
-): ChangeStreamUpdateDocument => {
+) => {
+  const shouldOmit = (testPath: string) =>
+    omittedPaths.includes(testPath) ||
+    omittedPaths.find((path) => testPath.startsWith(`${path}.`))
+
   if (event.updateDescription.updatedFields) {
-    const nestedUpdatedFields = unflatten(event.updateDescription.updatedFields)
-    for (const path of paths) {
-      unset(nestedUpdatedFields, path)
-    }
-    return _.set('updateDescription.updatedFields', nestedUpdatedFields, event)
+    map(
+      event.updateDescription.updatedFields,
+      (node) => {
+        const fullPath = node.path.join('.')
+        if (!shouldOmit(fullPath)) {
+          return node.val
+        }
+      },
+      { modifyInPlace: true }
+    )
   }
-  return event
+  if (event.updateDescription.removedFields) {
+    const removedFields = event.updateDescription.removedFields.filter(
+      (removedPath) => !shouldOmit(removedPath)
+    )
+    set(event, 'updateDescription.removedFields', removedFields)
+  }
 }
 
 export const getCollectionKey = (collection: Collection) =>
