@@ -43,8 +43,10 @@ export const omitFieldsForUpdate = (
   event: ChangeStreamUpdateDocument
 ) => {
   const shouldOmit = (path: string) =>
-    omittedPaths.includes(path) ||
-    omittedPaths.find((omittedPath) => path.startsWith(`${omittedPath}.`))
+    omittedPaths.find(
+      (omittedPath) =>
+        path === omittedPath || path.startsWith(`${omittedPath}.`)
+    )
 
   if (event.updateDescription.updatedFields) {
     map(
