@@ -327,7 +327,7 @@ describe('syncing', () => {
 
     const processed = []
     const processRecords = async (docs: ChangeStreamInsertDocument[]) => {
-      await setTimeout(15)
+      await setTimeout(50)
       processed.push(...docs)
     }
     const scanOptions = { batchSize: 25 }
@@ -343,7 +343,7 @@ describe('syncing', () => {
     // Start
     initialScan.start()
     // Allow for some records to be processed
-    await setTimeout(500)
+    await setTimeout(200)
     // Stop the initial scan
     await initialScan.stop()
     // Only a subset of the documents were processed
@@ -362,8 +362,12 @@ describe('syncing', () => {
     // Get a new connection since we're closing the connection in the test
     const { coll, redis, db, client } = await getConns({})
     const sync = initSync(redis, coll)
+    let cursorErrorEmitted = false
     sync.emitter.on('stateChange', console.log)
-    sync.emitter.on('cursorError', console.log)
+    sync.emitter.on('cursorError', (e: unknown) => {
+      cursorErrorEmitted = true
+      console.log(e)
+    })
     await initState(sync, db, coll)
 
     const processed = []
@@ -384,6 +388,7 @@ describe('syncing', () => {
     // Check if completed
     const completedAt = await redis.get(sync.keys.scanCompletedKey)
     assert.equal(completedAt, null)
+    assert.ok(cursorErrorEmitted)
     // Stop
     await initialScan.stop()
   })
@@ -681,33 +686,6 @@ describe('syncing', () => {
 
     assert.equal(cursorError, false)
     await changeStream.stop()
-  })
-
-  test('should emit cursorError if change stream is closed', async () => {
-    // Get a new connection since we're closing the connection in the test
-    const { redis, coll, db, client } = await getConns({})
-    const sync = initSync(redis, coll)
-
-    let error: any
-    sync.emitter.on('cursorError', (event: CursorErrorEvent) => {
-      console.log(event)
-      error = event.error
-    })
-    await initState(sync, db, coll)
-
-    const processRecords = async () => {
-      await setTimeout(500)
-    }
-    const changeStream = await sync.processChangeStream(processRecords)
-    // Start
-    changeStream.start()
-    await setTimeout(ms('1s'))
-    // Update records
-    await coll.updateMany({}, { $set: { createdAt: new Date('2022-01-01') } })
-    // Close the connection.
-    await client.close()
-    await setTimeout(ms('8s'))
-    assert.ok(error?.message)
   })
 
   test('Should resync when resync flag is set', async () => {

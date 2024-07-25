@@ -8,6 +8,7 @@ import {
   type ChangeStreamInsertDocument,
   type Collection,
   type Db,
+  type Document,
   ObjectId,
 } from 'mongodb'
 import * as mongodb from 'mongodb'
@@ -233,36 +234,36 @@ export function initSync<ExtendedEvents extends EventEmitter.ValidEventTypes>(
 
       const ns = { db: collection.dbName, coll: collection.collectionName }
       const nextChecker = safelyCheckNext(cursor)
+      let doc: Document | null
       // Process documents
-      while (await nextChecker.hasNext()) {
-        const doc = await cursor.next()
+      while ((doc = await nextChecker.getNext())) {
         debug('Initial scan doc %O', doc)
-        // Doc can be null if cursor is closed
-        if (doc) {
-          const changeStreamDoc = {
-            fullDocument: doc,
-            operationType: 'insert',
-            ns,
-          } as unknown as ChangeStreamInsertDocument
-          await queue.enqueue(changeStreamDoc)
-        }
+        const changeStreamDoc = {
+          fullDocument: doc,
+          operationType: 'insert',
+          ns,
+        } as unknown as ChangeStreamInsertDocument
+        await queue.enqueue(changeStreamDoc)
       }
       // Flush the queue
       await queue.flush()
-      // An error occurred getting next and we are not stopping
-      if (nextChecker.errorExists() && !state.is('stopping')) {
-        emit('cursorError', {
-          name: 'runInitialScan',
-          error: nextChecker.getLastError(),
-        })
-      }
-      // Exited cleanly from the loop so we're done
-      if (!nextChecker.errorExists()) {
-        debug('Completed initial scan')
-        // Record scan complete
-        await redis.set(keys.scanCompletedKey, new Date().toString())
-        // Emit event
-        emit('initialScanComplete', {})
+      // We are not stopping
+      if (!state.is('stopping')) {
+        // An error occurred getting next
+        if (nextChecker.errorExists()) {
+          emit('cursorError', {
+            name: 'runInitialScan',
+            error: nextChecker.getLastError(),
+          })
+        }
+        // Exited cleanly from the loop so we're done
+        else {
+          debug('Completed initial scan')
+          // Record scan complete
+          await redis.set(keys.scanCompletedKey, new Date().toString())
+          // Emit event
+          emit('initialScanComplete', {})
+        }
       }
       // Resolve deferred
       deferred.done()
@@ -373,9 +374,9 @@ export function initSync<ExtendedEvents extends EventEmitter.ValidEventTypes>(
       changeStream = await getChangeStream()
       state.change('started')
       const nextChecker = safelyCheckNext(changeStream)
+      let event: ChangeStreamDocument | null
       // Consume change stream
-      while (await nextChecker.hasNext()) {
-        let event = await changeStream.next()
+      while ((event = await nextChecker.getNext())) {
         debug('Change stream event %O', event)
         // Skip the event if the operation type is not one we care about
         if (operationTypes && !operationTypes.includes(event.operationType)) {
@@ -385,7 +386,7 @@ export function initSync<ExtendedEvents extends EventEmitter.ValidEventTypes>(
         // Omit nested fields that are not handled by $unset.
         // For example, if 'a' was omitted then 'a.b.c' should be omitted.
         if (event.operationType === 'update' && omit) {
-          event = omitFieldForUpdate(omit)(event)
+          event = omitFieldForUpdate(omit)(event) as ChangeStreamDocument
         }
         await queue.enqueue(event)
       }

@@ -1,3 +1,8 @@
+# 0.47.0
+
+- Bumped peer dependencies for `mongodb`.
+- Reworked `safelyCheckNext`.
+
 # 0.46.0
 
 - Bumped peer dependencies for `ioredis` and `mongodb`.

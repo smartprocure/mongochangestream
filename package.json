@@ -1,6 +1,6 @@
 {
   "name": "mongochangestream",
-  "version": "0.46.0",
+  "version": "0.47.0",
   "description": "Sync MongoDB collections via change streams into any database.",
   "author": "GovSpend",
   "main": "dist/index.js",
@@ -59,7 +59,7 @@
   },
   "peerDependencies": {
     "ioredis": ">= 5.4.1",
-    "mongodb": ">= 6.6.1"
+    "mongodb": ">= 6.8.0"
   },
   "prettier": {
     "semi": false,

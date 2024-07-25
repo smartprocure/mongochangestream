@@ -112,33 +112,27 @@ export function when<T, R>(condition: any, fn: (x: T) => R) {
 }
 
 /**
- * Check if the cursor has next without throwing an exception.
+ * Get next record without throwing an exception.
  * Get the last error safely via `getLastError`.
  */
 export const safelyCheckNext = (cursor: Cursor) => {
   let lastError: unknown
 
-  const hasNext = async () => {
+  const getNext = async () => {
     debug('safelyCheckNext called')
     try {
-      // Prevents hasNext from hanging when the cursor is already closed
-      if (cursor.closed) {
-        debug('safelyCheckNext cursor closed')
-        lastError = new Error('cursor closed')
-        return false
-      }
-      return await cursor.hasNext()
+      return await cursor.tryNext()
     } catch (e) {
       debug('safelyCheckNext error: %o', e)
       lastError = e
-      return false
+      return null
     }
   }
 
   const errorExists = () => Boolean(lastError)
   const getLastError = () => lastError
 
-  return { hasNext, errorExists, getLastError }
+  return { getNext, errorExists, getLastError }
 }
 
 const oplogErrorCodeNames = [
