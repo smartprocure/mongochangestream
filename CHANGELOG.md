@@ -1,3 +1,7 @@
+# 0.48.0
+
+- Fixed bug where `processChangeStream` exits prematurely.
+
 # 0.47.0
 
 - Bumped peer dependencies for `mongodb`.

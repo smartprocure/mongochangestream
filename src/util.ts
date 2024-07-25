@@ -1,11 +1,8 @@
-import _debug from 'debug'
 import _ from 'lodash/fp.js'
 import { type Collection, MongoServerError } from 'mongodb'
 import { type Node, walkEach } from 'obj-walker'
 
-import type { Cursor, CursorError, JSONSchema } from './types.js'
-
-const debug = _debug('mongochangestream')
+import type { CursorError, JSONSchema } from './types.js'
 
 export const setDefaults = (keys: string[], val: any) => {
   const obj: Record<string, any> = {}
@@ -109,30 +106,6 @@ export function when<T, R>(condition: any, fn: (x: T) => R) {
   return function (x: T) {
     return condition ? fn(x) : x
   }
-}
-
-/**
- * Get next record without throwing an exception.
- * Get the last error safely via `getLastError`.
- */
-export const safelyCheckNext = (cursor: Cursor) => {
-  let lastError: unknown
-
-  const getNext = async () => {
-    debug('safelyCheckNext called')
-    try {
-      return await cursor.tryNext()
-    } catch (e) {
-      debug('safelyCheckNext error: %o', e)
-      lastError = e
-      return null
-    }
-  }
-
-  const errorExists = () => Boolean(lastError)
-  const getLastError = () => lastError
-
-  return { getNext, errorExists, getLastError }
 }
 
 const oplogErrorCodeNames = [
