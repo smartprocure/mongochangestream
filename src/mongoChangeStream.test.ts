@@ -680,7 +680,7 @@ describe('syncing', () => {
     // Change all documents
     coll.updateMany({}, { $set: { createdAt: new Date('2022-01-02') } })
     // Wait for all documents to be processed
-    await setTimeout(ms('5s'))
+    await setTimeout(ms('6s'))
     // All change stream docs were processed
     assert.equal(processed.length, numDocs)
     // Reset processed
@@ -688,7 +688,7 @@ describe('syncing', () => {
     // Change all documents
     coll.updateMany({}, { $set: { createdAt: new Date('2022-01-03') } })
     // Wait for all documents to be processed
-    await setTimeout(ms('5s'))
+    await setTimeout(ms('6s'))
     // All change stream docs were processed
     assert.equal(processed.length, numDocs)
     await changeStream.stop()
