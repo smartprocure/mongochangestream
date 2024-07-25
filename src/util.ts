@@ -35,7 +35,7 @@ export const generatePipelineFromOmit = (omit: string[]) => {
  *   }
  * }
  * ```
- * Therefore, to remove 'a.b' we have to unflatten the `updateFields` object
+ * Therefore, to remove 'a.b' we have to walk the `updateFields` object
  * and unset the omitted paths.
  */
 export const omitFieldsForUpdate = (
