@@ -542,7 +542,6 @@ describe('syncing', () => {
     ])
     // Wait for the change stream events to be processed
     await setTimeout(ms('2s'))
-    // console.dir(documents, { depth: 10 })
     // Assertions
     assert.equal(documents[0].fullDocument.address.geo.long, 25)
     assert.equal(documents[0].fullDocument.address.geo.lat, undefined)
