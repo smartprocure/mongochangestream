@@ -2,6 +2,7 @@
 
 - Fixed bug where `processChangeStream` exits prematurely.
 - Fixed bug when omitting an updated nested field.
+- Omit fields from `updateDescription.removedFields` to prevent downstream issues.
 
 # 0.47.0
 
