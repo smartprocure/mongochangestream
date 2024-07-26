@@ -27,8 +27,9 @@ export const safelyCheckNext = (cursor: Cursor) => {
     try {
       return await cursor.hasNext()
     } catch (e) {
+      debug('hasNext error: %o', e)
       if (cursor.closed) {
-        debug('hasNext - cursor closed')
+        debug('hasNext cursor closed')
       }
       lastError = e
       return false
