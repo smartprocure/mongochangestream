@@ -104,7 +104,7 @@ describe('util', () => {
         },
       }
       omitFieldsForUpdate(['address.geo.long'], event)
-      assert.deepEqual(event.updateDescription, expected.updateDescription)
+      assert.deepEqual(event, expected)
     })
     test('should remove omitted fields from removedFields - prefix', () => {
       const event: any = {
@@ -122,7 +122,7 @@ describe('util', () => {
         },
       }
       omitFieldsForUpdate(['address.geo'], event)
-      assert.deepEqual(event.updateDescription, expected.updateDescription)
+      assert.deepEqual(event, expected)
     })
     test('should remove omitted fields from updatedFields - exact', () => {
       const event: any = {
@@ -145,7 +145,7 @@ describe('util', () => {
         },
       }
       omitFieldsForUpdate(['address.city'], event)
-      assert.deepEqual(event.updateDescription, expected.updateDescription)
+      assert.deepEqual(event, expected)
     })
     test('should remove omitted fields from updatedFields - prefix', () => {
       const event: any = {
@@ -168,7 +168,7 @@ describe('util', () => {
         },
       }
       omitFieldsForUpdate(['address.geo'], event)
-      assert.deepEqual(event.updateDescription, expected.updateDescription)
+      assert.deepEqual(event, expected)
     })
     test('should remove omitted fields from updatedFields - nested', () => {
       const event: any = {
@@ -192,7 +192,7 @@ describe('util', () => {
         },
       }
       omitFieldsForUpdate(['address.geo.lat'], event)
-      assert.deepEqual(event.updateDescription, expected.updateDescription)
+      assert.deepEqual(event, expected)
     })
   })
 })
