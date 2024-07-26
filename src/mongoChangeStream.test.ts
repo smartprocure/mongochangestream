@@ -50,6 +50,7 @@ const getSync = async (options?: SyncOptions) => {
 
 const genUser = () => ({
   name: faker.person.fullName(),
+  likes: [faker.animal.dog(), faker.animal.cat()],
   address: {
     city: faker.location.city(),
     state: faker.location.state(),
@@ -69,6 +70,12 @@ const schema: JSONSchema = {
   properties: {
     _id: { bsonType: 'objectId' },
     name: { bsonType: 'string' },
+    likes: {
+      bsonType: 'array',
+      items: {
+        bsonType: 'string',
+      },
+    },
     address: {
       bsonType: 'object',
       properties: {
@@ -451,6 +458,7 @@ describe('syncing', () => {
       {
         $set: { createdAt: new Date('2022-01-01') },
         $unset: { 'address.city': '', 'address.geo.lat': '' },
+        $pop: { likes: 1 },
       }
     )
     // Wait for the change stream events to be processed
