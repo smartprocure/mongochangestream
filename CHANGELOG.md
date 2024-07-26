@@ -1,3 +1,7 @@
+# 0.49.0
+
+- Don't assume that `updateDescription` will be on the change stream event.
+
 # 0.48.0
 
 - Fixed bug where `processChangeStream` exits prematurely.

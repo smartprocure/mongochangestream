@@ -462,12 +462,39 @@ describe('syncing', () => {
       }
     )
     // Wait for the change stream events to be processed
-    await setTimeout(ms('10s'))
+    await setTimeout(ms('6s'))
     assert.equal(processed.length, numDocs)
     // Stop
     await changeStream.stop()
     // Should not emit cursorError when stopping
     assert.equal(cursorError, false)
+  })
+
+  test('should process records via change stream - updateDescription removed', async () => {
+    const { coll, db } = await getConns()
+    const sync = await getSync()
+    await initState(sync, db, coll)
+
+    const processed: any[] = []
+    const processRecords = async (docs: ChangeStreamDocument[]) => {
+      for (const doc of docs) {
+        await setTimeout(5)
+        processed.push(doc)
+      }
+    }
+    const changeStream = await sync.processChangeStream(processRecords, {
+      pipeline: [{ $unset: ['updateDescription'] }],
+    })
+    // Start
+    changeStream.start()
+    await setTimeout(ms('1s'))
+    // Update records
+    coll.updateMany({}, { $set: { createdAt: new Date('2022-01-01') } })
+    // Wait for the change stream events to be processed
+    await setTimeout(ms('6s'))
+    assert.equal(processed.length, numDocs)
+    // Stop
+    await changeStream.stop()
   })
 
   test('should omit fields from change stream - dotted paths', async () => {

@@ -1,6 +1,6 @@
 {
   "name": "mongochangestream",
-  "version": "0.48.0",
+  "version": "0.49.0",
   "description": "Sync MongoDB collections via change streams into any database.",
   "author": "GovSpend",
   "main": "dist/index.js",
@@ -65,8 +65,12 @@
     "semi": false,
     "singleQuote": true,
     "trailingComma": "es5",
-    "plugins": ["@trivago/prettier-plugin-sort-imports"],
-    "importOrder": ["^[./]"],
+    "plugins": [
+      "@trivago/prettier-plugin-sort-imports"
+    ],
+    "importOrder": [
+      "^[./]"
+    ],
     "importOrderSortSpecifiers": true,
     "importOrderCaseInsensitive": true,
     "importOrderSeparation": true

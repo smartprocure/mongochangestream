@@ -386,7 +386,13 @@ export function initSync<ExtendedEvents extends EventEmitter.ValidEventTypes>(
         }
         // Omit nested fields that are not handled by $unset.
         // For example, if 'a' was omitted then 'a.b.c' should be omitted.
-        if (event.operationType === 'update' && omit) {
+        if (
+          omit &&
+          event.operationType === 'update' &&
+          // Downstream libraries might unset event.updateDescription
+          // to optimize performance (e.g., mongo2elastic).
+          event.updateDescription
+        ) {
           omitFieldsForUpdate(omit, event)
         }
         await queue.enqueue(event)
