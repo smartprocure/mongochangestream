@@ -1,7 +1,11 @@
 import assert from 'node:assert'
 import { describe, test } from 'node:test'
 
-import { generatePipelineFromOmit, removeUnusedFields } from './util.js'
+import {
+  generatePipelineFromOmit,
+  omitFieldsForUpdate,
+  removeUnusedFields,
+} from './util.js'
 
 describe('util', () => {
   describe('generatePipelineFromOmit', () => {
@@ -15,44 +19,6 @@ describe('util', () => {
             'fullDocument.createdAt',
             'updateDescription.updatedFields.createdAt',
           ],
-        },
-      ])
-    })
-
-    test('should generate pipeline from omit with dotted fields', () => {
-      const pipeline = generatePipelineFromOmit([
-        'documents.agenda.parsedText',
-        'documents.agenda.contentType',
-        'createdAt',
-      ])
-      assert.deepEqual(pipeline, [
-        {
-          $unset: [
-            'fullDocument.documents.agenda.parsedText',
-            'updateDescription.updatedFields.documents.agenda.parsedText',
-            'fullDocument.documents.agenda.contentType',
-            'updateDescription.updatedFields.documents.agenda.contentType',
-            'fullDocument.createdAt',
-            'updateDescription.updatedFields.createdAt',
-          ],
-        },
-        {
-          $set: {
-            'updateDescription.updatedFields': {
-              $arrayToObject: {
-                $filter: {
-                  input: { $objectToArray: '$updateDescription.updatedFields' },
-                  cond: {
-                    $regexMatch: {
-                      input: '$$this.k',
-                      regex:
-                        '^(?!documents\\.agenda\\.parsedText|documents\\.agenda\\.contentType)',
-                    },
-                  },
-                },
-              },
-            },
-          },
         },
       ])
     })
@@ -119,6 +85,114 @@ describe('util', () => {
           },
         },
       })
+    })
+  })
+  describe('omitFieldsForUpdate', () => {
+    test('should remove omitted fields from removedFields - exact', () => {
+      const event: any = {
+        updateDescription: {
+          updatedFields: {},
+          removedFields: ['address.geo.long'],
+          truncatedArrays: [],
+        },
+      }
+      const expected = {
+        updateDescription: {
+          updatedFields: {},
+          removedFields: [],
+          truncatedArrays: [],
+        },
+      }
+      omitFieldsForUpdate(['address.geo.long'], event)
+      assert.deepEqual(event, expected)
+    })
+    test('should remove omitted fields from removedFields - prefix', () => {
+      const event: any = {
+        updateDescription: {
+          updatedFields: {},
+          removedFields: ['address.geo.long'],
+          truncatedArrays: [],
+        },
+      }
+      const expected = {
+        updateDescription: {
+          updatedFields: {},
+          removedFields: [],
+          truncatedArrays: [],
+        },
+      }
+      omitFieldsForUpdate(['address.geo'], event)
+      assert.deepEqual(event, expected)
+    })
+    test('should remove omitted fields from updatedFields - exact', () => {
+      const event: any = {
+        updateDescription: {
+          updatedFields: {
+            name: 'unknown',
+            'address.city': 'San Diego',
+          },
+          removedFields: [],
+          truncatedArrays: [],
+        },
+      }
+      const expected = {
+        updateDescription: {
+          updatedFields: {
+            name: 'unknown',
+          },
+          removedFields: [],
+          truncatedArrays: [],
+        },
+      }
+      omitFieldsForUpdate(['address.city'], event)
+      assert.deepEqual(event, expected)
+    })
+    test('should remove omitted fields from updatedFields - prefix', () => {
+      const event: any = {
+        updateDescription: {
+          updatedFields: {
+            name: 'unknown',
+            'address.geo.lat': 24,
+          },
+          removedFields: [],
+          truncatedArrays: [],
+        },
+      }
+      const expected = {
+        updateDescription: {
+          updatedFields: {
+            name: 'unknown',
+          },
+          removedFields: [],
+          truncatedArrays: [],
+        },
+      }
+      omitFieldsForUpdate(['address.geo'], event)
+      assert.deepEqual(event, expected)
+    })
+    test('should remove omitted fields from updatedFields - nested', () => {
+      const event: any = {
+        updateDescription: {
+          updatedFields: {
+            name: 'unknown',
+            'address.geo': { lat: 24, long: 25 },
+          },
+          removedFields: [],
+          truncatedArrays: [],
+        },
+      }
+      const expected = {
+        updateDescription: {
+          updatedFields: {
+            name: 'unknown',
+            'address.geo': { long: 25 },
+          },
+          removedFields: [],
+          truncatedArrays: [],
+        },
+      }
+      omitFieldsForUpdate(['address.geo.lat'], event)
+      assert.deepEqual(event, expected)
     })
   })
 })

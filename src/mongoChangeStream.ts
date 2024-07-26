@@ -16,6 +16,7 @@ import ms from 'ms'
 import { batchQueue, defer, type Deferred, type QueueOptions } from 'prom-utils'
 import { fsm, type StateTransitions } from 'simple-machines'
 
+import { safelyCheckNext } from './safelyCheckNext.js'
 import {
   ChangeOptions,
   ChangeStreamOptions,
@@ -32,9 +33,8 @@ import {
 import {
   generatePipelineFromOmit,
   getCollectionKey,
-  omitFieldForUpdate,
+  omitFieldsForUpdate,
   removeUnusedFields,
-  safelyCheckNext,
   setDefaults,
   when,
 } from './util.js'
@@ -376,7 +376,8 @@ export function initSync<ExtendedEvents extends EventEmitter.ValidEventTypes>(
       const nextChecker = safelyCheckNext(changeStream)
       let event: ChangeStreamDocument | null
       // Consume change stream
-      while ((event = await nextChecker.getNext())) {
+      while (await nextChecker.hasNext()) {
+        event = await changeStream.next()
         debug('Change stream event %O', event)
         // Skip the event if the operation type is not one we care about
         if (operationTypes && !operationTypes.includes(event.operationType)) {
@@ -386,7 +387,7 @@ export function initSync<ExtendedEvents extends EventEmitter.ValidEventTypes>(
         // Omit nested fields that are not handled by $unset.
         // For example, if 'a' was omitted then 'a.b.c' should be omitted.
         if (event.operationType === 'update' && omit) {
-          event = omitFieldForUpdate(omit)(event) as ChangeStreamDocument
+          omitFieldsForUpdate(omit, event)
         }
         await queue.enqueue(event)
       }

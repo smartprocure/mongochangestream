@@ -50,6 +50,7 @@ const getSync = async (options?: SyncOptions) => {
 
 const genUser = () => ({
   name: faker.person.fullName(),
+  likes: [faker.animal.dog(), faker.animal.cat()],
   address: {
     city: faker.location.city(),
     state: faker.location.state(),
@@ -69,6 +70,12 @@ const schema: JSONSchema = {
   properties: {
     _id: { bsonType: 'objectId' },
     name: { bsonType: 'string' },
+    likes: {
+      bsonType: 'array',
+      items: {
+        bsonType: 'string',
+      },
+    },
     address: {
       bsonType: 'object',
       properties: {
@@ -434,7 +441,7 @@ describe('syncing', () => {
     sync.emitter.on('cursorError', () => {
       cursorError = true
     })
-    const processed = []
+    const processed: any[] = []
     const processRecords = async (docs: ChangeStreamDocument[]) => {
       for (const doc of docs) {
         await setTimeout(5)
@@ -446,7 +453,14 @@ describe('syncing', () => {
     changeStream.start()
     await setTimeout(ms('1s'))
     // Update records
-    coll.updateMany({}, { $set: { createdAt: new Date('2022-01-01') } })
+    coll.updateMany(
+      {},
+      {
+        $set: { createdAt: new Date('2022-01-01') },
+        $unset: { 'address.city': '', 'address.geo.lat': '' },
+        $pop: { likes: 1 },
+      }
+    )
     // Wait for the change stream events to be processed
     await setTimeout(ms('10s'))
     assert.equal(processed.length, numDocs)
@@ -483,7 +497,9 @@ describe('syncing', () => {
           name: 'unknown',
           'address.city': 'San Diego',
           'address.geo.lat': 24,
-          'address.geo.long': 25,
+        },
+        $unset: {
+          'address.geo.long': '',
         },
       }
     )
@@ -492,13 +508,59 @@ describe('syncing', () => {
     // Assertions
     assert.equal(documents[0].fullDocument.address.city, undefined)
     assert.equal(documents[0].fullDocument.address.geo, undefined)
-    const fields = ['address.city', 'address.geo.lat', 'address.geo.long']
+    const fields = ['address.city', 'address.geo.lat']
     for (const field of fields) {
       assert.equal(
         documents[0].updateDescription.updatedFields[field],
         undefined
       )
     }
+    assert.deepEqual(documents[0].updateDescription.removedFields, [])
+    // Stop
+    await changeStream.stop()
+  })
+
+  test('should omit fields from change stream - nested dotted path', async () => {
+    const { coll, db } = await getConns()
+    // address.geo is a path prefix relative to the paths being updated below
+    const sync = await getSync({ omit: ['address.geo.lat'] })
+    await initState(sync, db, coll)
+
+    const documents: Document[] = []
+    const processRecords = async (docs: ChangeStreamDocument[]) => {
+      for (const doc of docs) {
+        await setTimeout(5)
+        if (doc.operationType === 'update' && doc.fullDocument) {
+          documents.push(doc)
+        }
+      }
+    }
+    const changeStream = await sync.processChangeStream(processRecords)
+    // Start
+    changeStream.start()
+    await setTimeout(ms('1s'))
+    // Update record
+    coll.updateMany({}, [
+      {
+        $set: {
+          'address.geo.lat': 24,
+          'address.geo.long': 25,
+        },
+      },
+    ])
+    // Wait for the change stream events to be processed
+    await setTimeout(ms('2s'))
+    // Assertions
+    assert.equal(documents[0].fullDocument.address.geo.long, 25)
+    assert.equal(documents[0].fullDocument.address.geo.lat, undefined)
+    assert.equal(
+      documents[0].updateDescription.updatedFields['address.geo'].long,
+      25
+    )
+    assert.equal(
+      documents[0].updateDescription.updatedFields['address.geo'].lat,
+      undefined
+    )
     // Stop
     await changeStream.stop()
   })
@@ -574,7 +636,7 @@ describe('syncing', () => {
     await changeStream.stop()
   })
 
-  test('change stream should resume properly', async () => {
+  test('change stream should resume after being stopped', async () => {
     const { coll, db } = await getConns()
     const sync = await getSync()
     await initState(sync, db, coll)
@@ -602,7 +664,41 @@ describe('syncing', () => {
     // Resume change stream
     changeStream.start()
     // Wait for all documents to be processed
-    await setTimeout(ms('8s'))
+    await setTimeout(ms('5s'))
+    // All change stream docs were processed
+    assert.equal(processed.length, numDocs)
+    await changeStream.stop()
+  })
+
+  test('change stream should resume after pause in events', async () => {
+    const { coll, db } = await getConns()
+    const sync = await getSync()
+    await initState(sync, db, coll)
+
+    let processed = []
+    // Change stream
+    const processRecords = async (docs: ChangeStreamDocument[]) => {
+      for (const doc of docs) {
+        await setTimeout(8)
+        processed.push(doc)
+      }
+    }
+    const changeStream = await sync.processChangeStream(processRecords)
+    changeStream.start()
+    // Let change stream connect
+    await setTimeout(ms('1s'))
+    // Change all documents
+    coll.updateMany({}, { $set: { createdAt: new Date('2022-01-02') } })
+    // Wait for all documents to be processed
+    await setTimeout(ms('6s'))
+    // All change stream docs were processed
+    assert.equal(processed.length, numDocs)
+    // Reset processed
+    processed = []
+    // Change all documents
+    coll.updateMany({}, { $set: { createdAt: new Date('2022-01-03') } })
+    // Wait for all documents to be processed
+    await setTimeout(ms('6s'))
     // All change stream docs were processed
     assert.equal(processed.length, numDocs)
     await changeStream.stop()

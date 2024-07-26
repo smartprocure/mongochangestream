@@ -1,11 +1,12 @@
-import _debug from 'debug'
-import _ from 'lodash/fp.js'
-import { type Collection, MongoServerError } from 'mongodb'
-import { type Node, walkEach } from 'obj-walker'
+import { set } from 'lodash'
+import {
+  type ChangeStreamUpdateDocument,
+  type Collection,
+  MongoServerError,
+} from 'mongodb'
+import { map, type Node, walkEach } from 'obj-walker'
 
-import type { Cursor, CursorError, JSONSchema } from './types.js'
-
-const debug = _debug('mongochangestream')
+import type { CursorError, JSONSchema } from './types.js'
 
 export const setDefaults = (keys: string[], val: any) => {
   const obj: Record<string, any> = {}
@@ -13,6 +14,14 @@ export const setDefaults = (keys: string[], val: any) => {
     obj[key] = val
   }
   return obj
+}
+
+export const generatePipelineFromOmit = (omit: string[]) => {
+  const fields = omit.flatMap((field) => [
+    `fullDocument.${field}`,
+    `updateDescription.updatedFields.${field}`,
+  ])
+  return [{ $unset: fields }]
 }
 
 /**
@@ -26,53 +35,38 @@ export const setDefaults = (keys: string[], val: any) => {
  *   }
  * }
  * ```
- * Therefore, to remove 'a.b' we have to convert the `updateFields`
- * object to an array, filter the array with a regex, and convert
- * the array back to an object.
+ * Therefore, to remove 'a.b' we have to walk the `updateFields` object
+ * and unset the omitted paths.
  */
-const removeDottedPaths = (omit: string[]) => {
-  const dottedFields = omit
-    .filter((x) => x.includes('.'))
-    // Escape periods
-    .map((x) => x.replaceAll('.', '\\.'))
-  if (dottedFields.length) {
-    return {
-      $set: {
-        'updateDescription.updatedFields': {
-          $arrayToObject: {
-            $filter: {
-              input: { $objectToArray: '$updateDescription.updatedFields' },
-              cond: {
-                $regexMatch: {
-                  input: '$$this.k',
-                  regex: `^(?!${dottedFields.join('|')})`,
-                },
-              },
-            },
-          },
-        },
+export const omitFieldsForUpdate = (
+  omittedPaths: string[],
+  event: ChangeStreamUpdateDocument
+) => {
+  const shouldOmit = (path: string) =>
+    omittedPaths.find(
+      (omittedPath) =>
+        path === omittedPath || path.startsWith(`${omittedPath}.`)
+    )
+
+  if (event.updateDescription.updatedFields) {
+    map(
+      event.updateDescription.updatedFields,
+      (node) => {
+        const fullPath = node.path.join('.')
+        if (!shouldOmit(fullPath)) {
+          return node.val
+        }
       },
-    }
+      { modifyInPlace: true }
+    )
+  }
+  if (event.updateDescription.removedFields) {
+    const removedFields = event.updateDescription.removedFields.filter(
+      (removedPath) => !shouldOmit(removedPath)
+    )
+    set(event, 'updateDescription.removedFields', removedFields)
   }
 }
-
-export const generatePipelineFromOmit = (omit: string[]) => {
-  const fields = omit.flatMap((field) => [
-    `fullDocument.${field}`,
-    `updateDescription.updatedFields.${field}`,
-  ])
-  const dottedPathsStage = removeDottedPaths(omit)
-  const pipeline: any[] = [{ $unset: fields }]
-  return dottedPathsStage ? pipeline.concat([dottedPathsStage]) : pipeline
-}
-
-export const omitFields = (omitPaths: string[]) =>
-  _.omitBy((_val, key) =>
-    _.find((omitPath) => _.startsWith(`${omitPath}.`, key), omitPaths)
-  )
-
-export const omitFieldForUpdate = (omitPaths: string[]) =>
-  _.update('updateDescription.updatedFields', omitFields(omitPaths))
 
 export const getCollectionKey = (collection: Collection) =>
   `${collection.dbName}:${collection.collectionName}`
@@ -109,30 +103,6 @@ export function when<T, R>(condition: any, fn: (x: T) => R) {
   return function (x: T) {
     return condition ? fn(x) : x
   }
-}
-
-/**
- * Get next record without throwing an exception.
- * Get the last error safely via `getLastError`.
- */
-export const safelyCheckNext = (cursor: Cursor) => {
-  let lastError: unknown
-
-  const getNext = async () => {
-    debug('safelyCheckNext called')
-    try {
-      return await cursor.tryNext()
-    } catch (e) {
-      debug('safelyCheckNext error: %o', e)
-      lastError = e
-      return null
-    }
-  }
-
-  const errorExists = () => Boolean(lastError)
-  const getLastError = () => lastError
-
-  return { getNext, errorExists, getLastError }
 }
 
 const oplogErrorCodeNames = [

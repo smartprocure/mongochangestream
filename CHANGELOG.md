@@ -1,3 +1,9 @@
+# 0.48.0
+
+- Fixed bug where `processChangeStream` exits prematurely.
+- Fixed bug when omitting an updated nested field.
+- Omit fields from `updateDescription.removedFields` to prevent downstream issues.
+
 # 0.47.0
 
 - Bumped peer dependencies for `mongodb`.
