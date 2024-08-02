@@ -224,6 +224,13 @@ export function initSync<ExtendedEvents extends EventEmitter.ValidEventTypes>(
             new Date().getTime()
           )
         }
+        // Emit stats
+        if (options.emitStats) {
+          emit('stats', {
+            name: 'runInitialScan',
+            stats: queue.getStats(),
+          })
+        }
       }
       // Create queue
       const queue = batchQueue(_processRecords, options)
@@ -361,6 +368,13 @@ export function initSync<ExtendedEvents extends EventEmitter.ValidEventTypes>(
             keys.lastChangeProcessedAtKey,
             new Date().getTime()
           )
+        }
+        // Emit stats
+        if (options.emitStats) {
+          emit('stats', {
+            name: 'processChangeStream',
+            stats: queue.getStats(),
+          })
         }
       }
       // New deferred

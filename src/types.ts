@@ -7,6 +7,7 @@ import {
   MongoAPIError,
   MongoServerError,
 } from 'mongodb'
+import {QueueStats} from 'prom-utils'
 
 export type Cursor = ChangeStream | AggregationCursor
 export type JSONSchema = Record<string, any>
@@ -49,11 +50,15 @@ export interface ScanOptions<T = any> {
   sortField?: SortField<T>
   /** Extend the pipeline. Be careful not to exclude the sort field or change the sort order. */
   pipeline?: Document[]
+  /** When enabled, the `stats` event will be emitted after each batch is processed. */
+  emitStats?: boolean
 }
 
 export interface ChangeStreamOptions {
   pipeline?: Document[]
   operationTypes?: ChangeStreamDocument['operationType'][]
+  /** When enabled, the `stats` event will be emitted after each batch is processed. */
+  emitStats?: boolean
 }
 
 export interface ChangeOptions {
@@ -77,6 +82,7 @@ export type Events =
   | 'schemaChange'
   | 'stateChange'
   | 'initialScanComplete'
+  | 'stats'
 
 export interface ResyncEvent {
   type: 'resync'
@@ -105,6 +111,12 @@ export interface CursorErrorEvent {
   type: 'cursorError'
   name: 'runInitialScan' | 'processChangeStream'
   error: CursorError
+}
+
+export interface StatsEvent {
+  type: 'stats'
+  name: 'runInitialScan' | 'processChangeStream'
+  stats: QueueStats
 }
 
 // State
