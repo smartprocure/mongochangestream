@@ -88,7 +88,7 @@ export function initSync<ExtendedEvents extends EventEmitter.ValidEventTypes>(
   options: SyncOptions = {}
 ) {
   const keys = getKeys(collection, options)
-  const { omit } = options
+  const { omit, emitStats } = options
   const emitter = new EventEmitter<Events | ExtendedEvents>()
   const emit = (event: Events, data: object) => {
     emitter.emit(event, { type: event, ...data })
@@ -225,7 +225,7 @@ export function initSync<ExtendedEvents extends EventEmitter.ValidEventTypes>(
           )
         }
         // Emit stats
-        if (options.emitStats) {
+        if (emitStats) {
           emit('stats', {
             name: 'runInitialScan',
             stats: queue.getStats(),
@@ -370,7 +370,7 @@ export function initSync<ExtendedEvents extends EventEmitter.ValidEventTypes>(
           )
         }
         // Emit stats
-        if (options.emitStats) {
+        if (emitStats) {
           emit('stats', {
             name: 'processChangeStream',
             stats: queue.getStats(),

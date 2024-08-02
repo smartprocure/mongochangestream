@@ -34,6 +34,8 @@ export interface SyncOptions {
    * syncing jobs would overwrite each other.
    */
   uniqueId?: string
+  /** When enabled, the `stats` event will be emitted after each batch is processed. */
+  emitStats?: boolean
 }
 
 export interface SortField<T> {
@@ -50,15 +52,11 @@ export interface ScanOptions<T = any> {
   sortField?: SortField<T>
   /** Extend the pipeline. Be careful not to exclude the sort field or change the sort order. */
   pipeline?: Document[]
-  /** When enabled, the `stats` event will be emitted after each batch is processed. */
-  emitStats?: boolean
 }
 
 export interface ChangeStreamOptions {
   pipeline?: Document[]
   operationTypes?: ChangeStreamDocument['operationType'][]
-  /** When enabled, the `stats` event will be emitted after each batch is processed. */
-  emitStats?: boolean
 }
 
 export interface ChangeOptions {
