@@ -7,6 +7,7 @@ import {
   MongoAPIError,
   MongoServerError,
 } from 'mongodb'
+import { QueueStats } from 'prom-utils'
 
 export type Cursor = ChangeStream | AggregationCursor
 export type JSONSchema = Record<string, any>
@@ -77,6 +78,7 @@ export type Events =
   | 'schemaChange'
   | 'stateChange'
   | 'initialScanComplete'
+  | 'stats'
 
 export interface ResyncEvent {
   type: 'resync'
@@ -105,6 +107,16 @@ export interface CursorErrorEvent {
   type: 'cursorError'
   name: 'runInitialScan' | 'processChangeStream'
   error: CursorError
+}
+
+/**
+ * If `maxItemsPerSec` is not set, `stats.itemsPerSec` will be 0.
+ * If `maxBytesPerSec` is not set, `stats.bytesPerSec` will be 0.
+ */
+export interface StatsEvent {
+  type: 'stats'
+  name: 'runInitialScan' | 'processChangeStream'
+  stats: QueueStats
 }
 
 // State

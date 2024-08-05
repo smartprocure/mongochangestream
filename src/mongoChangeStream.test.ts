@@ -18,7 +18,7 @@ import ms from 'ms'
 import assert from 'node:assert'
 import { describe, test } from 'node:test'
 import { setTimeout } from 'node:timers/promises'
-import { type QueueOptions } from 'prom-utils'
+import type { QueueOptions, QueueStats } from 'prom-utils'
 
 import { initSync } from './mongoChangeStream.js'
 import type {
@@ -27,6 +27,7 @@ import type {
   ScanOptions,
   SchemaChangeEvent,
   SortField,
+  StatsEvent,
   SyncOptions,
 } from './types.js'
 import { missingOplogEntry } from './util.js'
@@ -203,6 +204,35 @@ describe('syncing', () => {
     // Wait for initial scan to complete
     await initialScan.start()
     assert.equal(processed.length, numDocs)
+    // Stop
+    await initialScan.stop()
+  })
+
+  test('initial scan should throttle', async () => {
+    const { coll, db } = await getConns()
+    const sync = await getSync()
+    await initState(sync, db, coll)
+
+    let stats: QueueStats = { itemsPerSec: 0, bytesPerSec: 0 }
+    sync.emitter.on('stats', (event: StatsEvent) => {
+      stats = event.stats
+    })
+
+    const processed = []
+    const processRecords = async (docs: ChangeStreamInsertDocument[]) => {
+      await setTimeout(50)
+      processed.push(...docs)
+    }
+    const initialScan = await sync.runInitialScan(processRecords, {
+      batchSize: 100,
+      maxItemsPerSec: 200,
+      maxBytesPerSec: 25000,
+    })
+    // Wait for initial scan to complete
+    await initialScan.start()
+    assert.equal(processed.length, numDocs)
+    assert.ok(stats.itemsPerSec > 0 && stats.itemsPerSec < 250)
+    assert.ok(stats.bytesPerSec > 0 && stats.bytesPerSec < 40000)
     // Stop
     await initialScan.stop()
   })
@@ -453,6 +483,42 @@ describe('syncing', () => {
     changeStream.start()
     await setTimeout(ms('1s'))
     // Update records
+    coll.updateMany({}, { $set: { createdAt: new Date('2022-01-01') } })
+    // Wait for the change stream events to be processed
+    await setTimeout(ms('6s'))
+    assert.equal(processed.length, numDocs)
+    // Stop
+    await changeStream.stop()
+    // Should not emit cursorError when stopping
+    assert.equal(cursorError, false)
+  })
+
+  test('change stream should throttle', async () => {
+    const { coll, db } = await getConns()
+    const sync = await getSync()
+    await initState(sync, db, coll)
+
+    let stats: QueueStats = { itemsPerSec: 0, bytesPerSec: 0 }
+    sync.emitter.on('stats', (event: StatsEvent) => {
+      stats = event.stats
+    })
+
+    const processed: any[] = []
+    const processRecords = async (docs: ChangeStreamDocument[]) => {
+      for (const doc of docs) {
+        await setTimeout(5)
+        processed.push(doc)
+      }
+    }
+    const changeStream = await sync.processChangeStream(processRecords, {
+      batchSize: 100,
+      maxItemsPerSec: 100,
+      maxBytesPerSec: 65000,
+    })
+    // Start
+    changeStream.start()
+    await setTimeout(ms('1s'))
+    // Update records
     coll.updateMany(
       {},
       {
@@ -462,12 +528,12 @@ describe('syncing', () => {
       }
     )
     // Wait for the change stream events to be processed
-    await setTimeout(ms('6s'))
+    await setTimeout(ms('8s'))
     assert.equal(processed.length, numDocs)
+    assert.ok(stats.itemsPerSec > 0 && stats.itemsPerSec < 200)
+    assert.ok(stats.bytesPerSec > 0 && stats.bytesPerSec < 75000)
     // Stop
     await changeStream.stop()
-    // Should not emit cursorError when stopping
-    assert.equal(cursorError, false)
   })
 
   test('should process records via change stream - updateDescription removed', async () => {
