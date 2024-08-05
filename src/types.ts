@@ -7,7 +7,7 @@ import {
   MongoAPIError,
   MongoServerError,
 } from 'mongodb'
-import {QueueStats} from 'prom-utils'
+import { QueueStats } from 'prom-utils'
 
 export type Cursor = ChangeStream | AggregationCursor
 export type JSONSchema = Record<string, any>

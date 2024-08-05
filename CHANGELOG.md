@@ -1,6 +1,6 @@
 # 0.50.0
 
--   Bump packages.
+-   Bump packages, including latest `prom-utils` which allows for throttling of items/sec and bytes/sec.
 -   New event: `stats` which emits stats for items/sec and bytes/sec when a batch of
     records is processed for the initial scan or change stream.
 
