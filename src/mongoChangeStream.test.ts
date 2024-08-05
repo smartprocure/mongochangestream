@@ -223,12 +223,11 @@ describe('syncing', () => {
       await setTimeout(50)
       processed.push(...docs)
     }
-    const scanOptions: QueueOptions = {
+    const initialScan = await sync.runInitialScan(processRecords, {
       batchSize: 100,
       maxItemsPerSec: 200,
       maxBytesPerSec: 25000,
-    }
-    const initialScan = await sync.runInitialScan(processRecords, scanOptions)
+    })
     // Wait for initial scan to complete
     await initialScan.start()
     assert.equal(processed.length, numDocs)
@@ -531,10 +530,10 @@ describe('syncing', () => {
     // Wait for the change stream events to be processed
     await setTimeout(ms('8s'))
     assert.equal(processed.length, numDocs)
-    // Stop
-    await changeStream.stop()
     assert.ok(stats.itemsPerSec < 200)
     assert.ok(stats.bytesPerSec < 75000)
+    // Stop
+    await changeStream.stop()
   })
 
   test('should process records via change stream - updateDescription removed', async () => {
