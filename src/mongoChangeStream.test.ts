@@ -210,7 +210,7 @@ describe('syncing', () => {
 
   test('initial scan should throttle', async () => {
     const { coll, db } = await getConns()
-    const sync = await getSync({ emitStats: true })
+    const sync = await getSync()
     await initState(sync, db, coll)
 
     let stats: QueueStats = { itemsPerSec: 0, bytesPerSec: 0 }
@@ -495,7 +495,7 @@ describe('syncing', () => {
 
   test('change stream should throttle', async () => {
     const { coll, db } = await getConns()
-    const sync = await getSync({ emitStats: true })
+    const sync = await getSync()
     await initState(sync, db, coll)
 
     let stats: QueueStats = { itemsPerSec: 0, bytesPerSec: 0 }
