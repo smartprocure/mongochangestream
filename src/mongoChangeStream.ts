@@ -88,7 +88,7 @@ export function initSync<ExtendedEvents extends EventEmitter.ValidEventTypes>(
   options: SyncOptions = {}
 ) {
   const keys = getKeys(collection, options)
-  const { omit, emitStats } = options
+  const { omit } = options
   const emitter = new EventEmitter<Events | ExtendedEvents>()
   const emit = (event: Events, data: object) => {
     emitter.emit(event, { type: event, ...data })
@@ -225,12 +225,10 @@ export function initSync<ExtendedEvents extends EventEmitter.ValidEventTypes>(
           )
         }
         // Emit stats
-        if (emitStats) {
-          emit('stats', {
-            name: 'runInitialScan',
-            stats: queue.getStats(),
-          })
-        }
+        emit('stats', {
+          name: 'runInitialScan',
+          stats: queue.getStats(),
+        })
       }
       // Create queue
       const queue = batchQueue(_processRecords, options)
@@ -370,12 +368,10 @@ export function initSync<ExtendedEvents extends EventEmitter.ValidEventTypes>(
           )
         }
         // Emit stats
-        if (emitStats) {
-          emit('stats', {
-            name: 'processChangeStream',
-            stats: queue.getStats(),
-          })
-        }
+        emit('stats', {
+          name: 'processChangeStream',
+          stats: queue.getStats(),
+        })
       }
       // New deferred
       deferred = defer()

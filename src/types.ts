@@ -34,11 +34,6 @@ export interface SyncOptions {
    * syncing jobs would overwrite each other.
    */
   uniqueId?: string
-  /**
-   * When enabled, the `stats` event will be emitted after each batch is processed.
-   * Stats will be zero if the corresponding option is not set - `maxItemsPerSec` or `maxBytesPerSec`.
-   */
-  emitStats?: boolean
 }
 
 export interface SortField<T> {
@@ -114,6 +109,10 @@ export interface CursorErrorEvent {
   error: CursorError
 }
 
+/**
+ * If `maxItemsPerSec` is not set, `itemsPerSec` will be 0.
+ * If `maxBytesPerSec` is not set, `bytesPerSec` will be 0.
+ */
 export interface StatsEvent {
   type: 'stats'
   name: 'runInitialScan' | 'processChangeStream'
