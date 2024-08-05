@@ -110,8 +110,8 @@ export interface CursorErrorEvent {
 }
 
 /**
- * If `maxItemsPerSec` is not set, `itemsPerSec` will be 0.
- * If `maxBytesPerSec` is not set, `bytesPerSec` will be 0.
+ * If `maxItemsPerSec` is not set, `stats.itemsPerSec` will be 0.
+ * If `maxBytesPerSec` is not set, `stats.bytesPerSec` will be 0.
  */
 export interface StatsEvent {
   type: 'stats'
