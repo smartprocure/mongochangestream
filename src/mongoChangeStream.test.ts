@@ -231,8 +231,8 @@ describe('syncing', () => {
     // Wait for initial scan to complete
     await initialScan.start()
     assert.equal(processed.length, numDocs)
-    assert.ok(stats.itemsPerSec < 250)
-    assert.ok(stats.bytesPerSec < 40000)
+    assert.ok(stats.itemsPerSec > 0 && stats.itemsPerSec < 250)
+    assert.ok(stats.bytesPerSec > 0 && stats.bytesPerSec < 40000)
     // Stop
     await initialScan.stop()
   })
@@ -530,8 +530,8 @@ describe('syncing', () => {
     // Wait for the change stream events to be processed
     await setTimeout(ms('8s'))
     assert.equal(processed.length, numDocs)
-    assert.ok(stats.itemsPerSec < 200)
-    assert.ok(stats.bytesPerSec < 75000)
+    assert.ok(stats.itemsPerSec > 0 && stats.itemsPerSec < 200)
+    assert.ok(stats.bytesPerSec > 0 && stats.bytesPerSec < 75000)
     // Stop
     await changeStream.stop()
   })
