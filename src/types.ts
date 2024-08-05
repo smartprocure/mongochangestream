@@ -34,7 +34,10 @@ export interface SyncOptions {
    * syncing jobs would overwrite each other.
    */
   uniqueId?: string
-  /** When enabled, the `stats` event will be emitted after each batch is processed. */
+  /**
+   * When enabled, the `stats` event will be emitted after each batch is processed.
+   * Stats will be zero if the corresponding option is not set - `maxItemsPerSec` or `maxBytesPerSec`.
+   */
   emitStats?: boolean
 }
 
