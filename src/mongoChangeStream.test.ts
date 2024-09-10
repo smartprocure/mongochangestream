@@ -208,6 +208,30 @@ describe('syncing', () => {
     await initialScan.stop()
   })
 
+  test('should pause initial scan', async () => {
+    const { coll, db } = await getConns()
+    const sync = await getSync()
+    await initState(sync, db, coll)
+
+    const processed = []
+    const processRecords = async (docs: ChangeStreamInsertDocument[]) => {
+      await setTimeout(50)
+      processed.push(...docs)
+
+      if (processed.length === 200) {
+        sync.pausable.pause()
+        global.setTimeout(sync.pausable.resume, 1000)
+      }
+    }
+    const scanOptions = { batchSize: 100 }
+    const initialScan = await sync.runInitialScan(processRecords, scanOptions)
+    // Wait for initial scan to complete
+    await initialScan.start()
+    assert.equal(processed.length, numDocs)
+    // Stop
+    await initialScan.stop()
+  })
+
   test('initial scan should throttle', async () => {
     const { coll, db } = await getConns()
     const sync = await getSync()
@@ -476,6 +500,41 @@ describe('syncing', () => {
       for (const doc of docs) {
         await setTimeout(5)
         processed.push(doc)
+      }
+    }
+    const changeStream = await sync.processChangeStream(processRecords)
+    // Start
+    changeStream.start()
+    await setTimeout(ms('1s'))
+    // Update records
+    coll.updateMany({}, { $set: { createdAt: new Date('2022-01-01') } })
+    // Wait for the change stream events to be processed
+    await setTimeout(ms('6s'))
+    assert.equal(processed.length, numDocs)
+    // Stop
+    await changeStream.stop()
+    // Should not emit cursorError when stopping
+    assert.equal(cursorError, false)
+  })
+
+  test('should process records via change stream', { only: true }, async () => {
+    const { coll, db } = await getConns()
+    const sync = await getSync()
+    await initState(sync, db, coll)
+
+    let cursorError = false
+    sync.emitter.on('cursorError', () => {
+      cursorError = true
+    })
+    const processed: any[] = []
+    const processRecords = async (docs: ChangeStreamDocument[]) => {
+      for (const doc of docs) {
+        await setTimeout(5)
+        processed.push(doc)
+        if (processed.length === 200) {
+          sync.pausable.pause()
+          global.setTimeout(sync.pausable.resume, 1000)
+        }
       }
     }
     const changeStream = await sync.processChangeStream(processRecords)
