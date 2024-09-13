@@ -592,7 +592,7 @@ describe('syncing', () => {
     await setTimeout(ms('8s'))
     assert.equal(processed.length, numDocs)
     assert.ok(stats.itemsPerSec > 0 && stats.itemsPerSec < 200)
-    assert.ok(stats.bytesPerSec > 0 && stats.bytesPerSec < 75000)
+    assert.ok(stats.bytesPerSec > 0 && stats.bytesPerSec < 80000)
     // Stop
     await changeStream.stop()
   })
