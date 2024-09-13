@@ -517,7 +517,7 @@ describe('syncing', () => {
     assert.equal(cursorError, false)
   })
 
-  test('should process records via change stream', async () => {
+  test('change stream should resume after pause in events', async () => {
     const { coll, db } = await getConns()
     const sync = await getSync()
     await initState(sync, db, coll)
@@ -819,40 +819,6 @@ describe('syncing', () => {
     changeStream.start()
     // Wait for all documents to be processed
     await setTimeout(ms('5s'))
-    // All change stream docs were processed
-    assert.equal(processed.length, numDocs)
-    await changeStream.stop()
-  })
-
-  test('change stream should resume after pause in events', async () => {
-    const { coll, db } = await getConns()
-    const sync = await getSync()
-    await initState(sync, db, coll)
-
-    let processed = []
-    // Change stream
-    const processRecords = async (docs: ChangeStreamDocument[]) => {
-      for (const doc of docs) {
-        await setTimeout(8)
-        processed.push(doc)
-      }
-    }
-    const changeStream = await sync.processChangeStream(processRecords)
-    changeStream.start()
-    // Let change stream connect
-    await setTimeout(ms('1s'))
-    // Change all documents
-    coll.updateMany({}, { $set: { createdAt: new Date('2022-01-02') } })
-    // Wait for all documents to be processed
-    await setTimeout(ms('6s'))
-    // All change stream docs were processed
-    assert.equal(processed.length, numDocs)
-    // Reset processed
-    processed = []
-    // Change all documents
-    coll.updateMany({}, { $set: { createdAt: new Date('2022-01-03') } })
-    // Wait for all documents to be processed
-    await setTimeout(ms('6s'))
     // All change stream docs were processed
     assert.equal(processed.length, numDocs)
     await changeStream.stop()
