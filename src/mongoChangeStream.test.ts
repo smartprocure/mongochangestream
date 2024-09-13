@@ -137,6 +137,7 @@ describe('syncing', () => {
     // Start twice
     changeStream.start()
     changeStream.start()
+    await setTimeout(500)
     await changeStream.stop()
   })
 
@@ -170,6 +171,7 @@ describe('syncing', () => {
     // Start twice
     initialScan.start()
     initialScan.start()
+    await setTimeout(500)
     await initialScan.stop()
   })
 
