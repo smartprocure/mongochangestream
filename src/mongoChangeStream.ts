@@ -126,7 +126,10 @@ export function initSync<ExtendedEvents extends EventEmitter.ValidEventTypes>(
       }
       // Check periodically if the collection should be resynced
       resyncTimer = setInterval(async () => {
-        if (pause.isPaused) return
+        if (pause.isPaused) {
+          debug('Skipping re-sync check - paused')
+          return
+        }
         if (await shouldResync()) {
           debug('Resync triggered')
           emit('resync', {})
@@ -517,8 +520,7 @@ export function initSync<ExtendedEvents extends EventEmitter.ValidEventTypes>(
    */
   const detectSchemaChange = async (db: Db, options: ChangeOptions = {}) => {
     const interval = options.interval || ms('1m')
-    const shouldRemoveUnusedFields =
-      options.shouldRemoveUnusedFields || options.shouldRemoveMetadata
+    const shouldRemoveUnusedFields = options.shouldRemoveUnusedFields
     const maybeRemoveUnusedFields = when(
       shouldRemoveUnusedFields,
       removeUnusedFields
@@ -544,7 +546,10 @@ export function initSync<ExtendedEvents extends EventEmitter.ValidEventTypes>(
     debug('Previous schema %O', previousSchema)
     // Check for a schema change
     const checkForSchemaChange = async () => {
-      if (pause.isPaused) return
+      if (pause.isPaused) {
+        debug('Skipping schema change check - paused')
+        return
+      }
 
       const currentSchema = await getCollectionSchema(db).then(
         maybeRemoveUnusedFields
@@ -591,6 +596,7 @@ export function initSync<ExtendedEvents extends EventEmitter.ValidEventTypes>(
     detectResync,
     keys,
     emitter,
+    /** Pause and resume all syncing functions at once. */
     pausable: pause,
   }
 }

@@ -56,7 +56,7 @@
     "eventemitter3": "^5.0.1",
     "lodash": "^4.17.21",
     "ms": "^2.1.3",
-    "obj-walker": "^2.2.0",
+    "obj-walker": "^2.3.0",
     "prom-utils": "^0.13.0",
     "simple-machines": "^0.4.0"
   },

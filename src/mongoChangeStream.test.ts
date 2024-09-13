@@ -441,7 +441,7 @@ describe('syncing', () => {
     // Start
     initialScan.start()
     // Allow for some records to be processed
-    await setTimeout(200)
+    await setTimeout(100)
     // Close the connection.
     await client.close()
     // Allow for some time
@@ -517,7 +517,7 @@ describe('syncing', () => {
     assert.equal(cursorError, false)
   })
 
-  test('should process records via change stream', { only: true }, async () => {
+  test('should process records via change stream', async () => {
     const { coll, db } = await getConns()
     const sync = await getSync()
     await initState(sync, db, coll)
@@ -537,7 +537,9 @@ describe('syncing', () => {
         }
       }
     }
-    const changeStream = await sync.processChangeStream(processRecords)
+    const changeStream = await sync.processChangeStream(processRecords, {
+      batchSize: 100,
+    })
     // Start
     changeStream.start()
     await setTimeout(ms('1s'))
@@ -980,6 +982,26 @@ describe('syncing', () => {
     await initialScan.stop()
   })
 
+  test('Resync is pausable', async () => {
+    const { coll, db, redis } = await getConns()
+    const sync = await getSync()
+    await initState(sync, db, coll)
+
+    let resyncTriggered = false
+    const resync = sync.detectResync(250)
+    sync.emitter.on('resync', async () => {
+      resyncTriggered = true
+    })
+    // Start resync detection
+    resync.start()
+    // Pause
+    sync.pausable.pause()
+    // Trigger resync
+    await redis.set(sync.keys.resyncKey, 1)
+    await setTimeout(ms('1s'))
+    assert.ok(!resyncTriggered)
+  })
+
   test('Resync start/stop is idempotent', async () => {
     const sync = await getSync()
 
@@ -993,11 +1015,7 @@ describe('syncing', () => {
   test('Detect schema change', async () => {
     const { db, coll } = await getConns()
     const sync = await getSync()
-    // Set schema
-    await db.command({
-      collMod: coll.collectionName,
-      validator: { $jsonSchema: schema },
-    })
+    await initState(sync, db, coll)
     // Look for a new schema every 250 ms
     const schemaChange = await sync.detectSchemaChange(db, {
       shouldRemoveUnusedFields: true,
@@ -1022,6 +1040,38 @@ describe('syncing', () => {
     })
     await setTimeout(ms('1s'))
     assert.ok(schemaChangeEventTriggered)
+    schemaChange.stop()
+  })
+
+  test('Detect schema change is pausable', async () => {
+    const { db, coll } = await getConns()
+    const sync = await getSync()
+    await initState(sync, db, coll)
+    // Look for a new schema every 250 ms
+    const schemaChange = await sync.detectSchemaChange(db, {
+      shouldRemoveUnusedFields: true,
+      interval: 250,
+    })
+    let schemaChangeEventTriggered = false
+    sync.emitter.on('schemaChange', () => {
+      schemaChangeEventTriggered = true
+    })
+    // Start detecting schema changes
+    schemaChange.start()
+    // Pause
+    sync.pausable.pause()
+    // Modify the schema
+    const modifiedSchema = _.set(
+      'properties.email',
+      { bsonType: 'string' },
+      schema
+    )
+    await db.command({
+      collMod: coll.collectionName,
+      validator: { $jsonSchema: modifiedSchema },
+    })
+    await setTimeout(ms('1s'))
+    assert.ok(!schemaChangeEventTriggered)
     schemaChange.stop()
   })
 
