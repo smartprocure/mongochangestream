@@ -222,7 +222,8 @@ describe('syncing', () => {
 
       if (processed.length === 200) {
         sync.pausable.pause()
-        global.setTimeout(sync.pausable.resume, 1000)
+        // Call resume after 1s
+        global.setTimeout(sync.pausable.resume, ms('1s'))
       }
     }
     const scanOptions = { batchSize: 100 }
@@ -521,7 +522,8 @@ describe('syncing', () => {
 
   test('change stream should resume after pause in events', async () => {
     const { coll, db } = await getConns()
-    const sync = await getSync()
+    // Use maxPauseTime option to auto-resume
+    const sync = await getSync({ maxPauseTime: ms('1s') })
     await initState(sync, db, coll)
 
     let cursorError = false
@@ -535,7 +537,6 @@ describe('syncing', () => {
         processed.push(doc)
         if (processed.length === 200) {
           sync.pausable.pause()
-          global.setTimeout(sync.pausable.resume, 1000)
         }
       }
     }
