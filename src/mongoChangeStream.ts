@@ -104,7 +104,7 @@ export function initSync<ExtendedEvents extends EventEmitter.ValidEventTypes>(
     emitter.emit(event, { type: event, ...data })
   }
   const emitStateChange = (change: object) => emit('stateChange', change)
-  const pause = pausable()
+  const pause = pausable(options.maxPauseTime)
 
   /**
    * Determine if the collection should be resynced by checking for the existence

@@ -34,6 +34,11 @@ export interface SyncOptions {
    * syncing jobs would overwrite each other.
    */
   uniqueId?: string
+  /**
+   * Maximum time to pause in ms after calling `pausable.pause()`.
+   * By default, pausing is indefinite.
+   */
+  maxPauseTime?: number
 }
 
 export interface SortField<T> {
