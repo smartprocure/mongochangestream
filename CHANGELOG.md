@@ -1,3 +1,8 @@
+# 0.51.0
+
+-   Added `pausable` to `pause` and `resume` all syncing operations.
+-   Removed deprecated `shouldRemoveMetadata` option.
+
 # 0.50.0
 
 -   Bump packages, including latest `prom-utils` which allows for throttling of items/sec and bytes/sec.

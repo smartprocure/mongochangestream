@@ -13,7 +13,13 @@ import {
 } from 'mongodb'
 import * as mongodb from 'mongodb'
 import ms from 'ms'
-import { batchQueue, defer, type Deferred, type QueueOptions } from 'prom-utils'
+import {
+  batchQueue,
+  defer,
+  type Deferred,
+  pausable,
+  type QueueOptions,
+} from 'prom-utils'
 import { fsm, type StateTransitions } from 'simple-machines'
 
 import { safelyCheckNext } from './safelyCheckNext.js'
@@ -87,15 +93,23 @@ export function initSync<ExtendedEvents extends EventEmitter.ValidEventTypes>(
   collection: Collection,
   options: SyncOptions = {}
 ) {
+  /**
+   * Redis keys used for the collection.
+   */
   const keys = getKeys(collection, options)
   const { omit } = options
+  /** Event emitter */
   const emitter = new EventEmitter<Events | ExtendedEvents>()
   const emit = (event: Events, data: object) => {
     emitter.emit(event, { type: event, ...data })
   }
   const emitStateChange = (change: object) => emit('stateChange', change)
+  const pause = pausable(options.maxPauseTime)
 
-  /** Detect if resync flag is set */
+  /**
+   * Determine if the collection should be resynced by checking for the existence
+   * of the resync key in Redis.
+   */
   const detectResync = (resyncCheckInterval = ms('1m')) => {
     let resyncTimer: NodeJS.Timeout
     const state = fsm(simpleStateTransistions, 'stopped', {
@@ -112,6 +126,10 @@ export function initSync<ExtendedEvents extends EventEmitter.ValidEventTypes>(
       }
       // Check periodically if the collection should be resynced
       resyncTimer = setInterval(async () => {
+        if (pause.isPaused) {
+          debug('Skipping re-sync check - paused')
+          return
+        }
         if (await shouldResync()) {
           debug('Resync triggered')
           emit('resync', {})
@@ -132,6 +150,13 @@ export function initSync<ExtendedEvents extends EventEmitter.ValidEventTypes>(
     return { start, stop }
   }
 
+  /**
+   * Run initial collection scan. `options.batchSize` defaults to 500.
+   * Sorting defaults to `_id`.
+   *
+   * Call `start` to start processing documents and `stop` to close
+   * the cursor.
+   */
   async function runInitialScan<T = any>(
     processRecords: ProcessInitialScanRecords,
     options: QueueOptions & ScanOptions<T> = {}
@@ -249,6 +274,7 @@ export function initSync<ExtendedEvents extends EventEmitter.ValidEventTypes>(
           ns,
         } as unknown as ChangeStreamInsertDocument
         await queue.enqueue(changeStreamDoc)
+        await pause.maybeBlock()
       }
       // Flush the queue
       await queue.flush()
@@ -307,6 +333,14 @@ export function initSync<ExtendedEvents extends EventEmitter.ValidEventTypes>(
     return { start, stop, restart, state: _.pick(stateFields, state) }
   }
 
+  /**
+   * Process MongoDB change stream for the collection.
+   * If omit is passed to `initSync` a pipeline stage that removes
+   * those fields will be prepended to the `pipeline` argument.
+   *
+   * Call `start` to start processing events and `stop` to close
+   * the change stream.
+   */
   const processChangeStream = async (
     processRecords: ProcessChangeStreamRecords,
     options: QueueOptions & ChangeStreamOptions = {}
@@ -406,6 +440,7 @@ export function initSync<ExtendedEvents extends EventEmitter.ValidEventTypes>(
           omitFieldsForUpdate(omit, event)
         }
         await queue.enqueue(event)
+        await pause.maybeBlock()
       }
       await queue.flush()
       // An error occurred getting next and we are not stopping
@@ -451,11 +486,17 @@ export function initSync<ExtendedEvents extends EventEmitter.ValidEventTypes>(
     return { start, stop, restart, state: _.pick(stateFields, state) }
   }
 
+  /**
+   * Delete all Redis keys for the collection.
+   */
   const reset = async () => {
     debug('Reset')
     await redis.del(...Object.values(keys))
   }
 
+  /**
+   * Get the existing JSON schema for the collection.
+   */
   const getCollectionSchema = async (db: Db): Promise<JSONSchema> => {
     const colls = await db
       .listCollections({ name: collection.collectionName })
@@ -469,10 +510,17 @@ export function initSync<ExtendedEvents extends EventEmitter.ValidEventTypes>(
   const getCachedCollectionSchema = () =>
     redis.get(keys.schemaKey).then((val: any) => val && JSON.parse(val))
 
+  /**
+   * Check for schema changes every interval and emit 'change' event if found.
+   * Optionally, set interval and strip unused fields (e.g., title and description)
+   * from the JSON schema.
+   *
+   * Call `start` to start polling for schema changes and `stop` to clear
+   * the timer.
+   */
   const detectSchemaChange = async (db: Db, options: ChangeOptions = {}) => {
     const interval = options.interval || ms('1m')
-    const shouldRemoveUnusedFields =
-      options.shouldRemoveUnusedFields || options.shouldRemoveMetadata
+    const shouldRemoveUnusedFields = options.shouldRemoveUnusedFields
     const maybeRemoveUnusedFields = when(
       shouldRemoveUnusedFields,
       removeUnusedFields
@@ -498,6 +546,11 @@ export function initSync<ExtendedEvents extends EventEmitter.ValidEventTypes>(
     debug('Previous schema %O', previousSchema)
     // Check for a schema change
     const checkForSchemaChange = async () => {
+      if (pause.isPaused) {
+        debug('Skipping schema change check - paused')
+        return
+      }
+
       const currentSchema = await getCollectionSchema(db).then(
         maybeRemoveUnusedFields
       )
@@ -535,50 +588,15 @@ export function initSync<ExtendedEvents extends EventEmitter.ValidEventTypes>(
   }
 
   return {
-    /**
-     * Run initial collection scan. `options.batchSize` defaults to 500.
-     * Sorting defaults to `_id`.
-     *
-     * Call `start` to start processing documents and `stop` to close
-     * the cursor.
-     */
     runInitialScan,
-    /**
-     * Process MongoDB change stream for the collection.
-     * If omit is passed to `initSync` a pipeline stage that removes
-     * those fields will be prepended to the `pipeline` argument.
-     *
-     * Call `start` to start processing events and `stop` to close
-     * the change stream.
-     */
     processChangeStream,
-    /**
-     * Delete all Redis keys for the collection.
-     */
     reset,
-    /**
-     * Get the existing JSON schema for the collection.
-     */
     getCollectionSchema,
-    /**
-     * Check for schema changes every interval and emit 'change' event if found.
-     * Optionally, set interval and strip metadata (i.e., title and description)
-     * from the JSON schema.
-     *
-     * Call `start` to start polling for schema changes and `stop` to clear
-     * the timer.
-     */
     detectSchemaChange,
-    /**
-     * Determine if the collection should be resynced by checking for the existence
-     * of the resync key in Redis.
-     */
     detectResync,
-    /**
-     * Redis keys used for the collection.
-     */
     keys,
-    /** Event emitter */
     emitter,
+    /** Pause and resume all syncing functions at once. */
+    pausable: pause,
   }
 }

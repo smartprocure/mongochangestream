@@ -98,6 +98,10 @@ See also the `missingOplogEntry` utility function that helps determine if an
 oplog entry is no longer present and resumption of a change stream from a previous
 point is not possible.
 
+It is recommended that you run a periodic check (e.g., every minute) to determine
+the health of the destination database that data is being synced to. If an issue
+is detected use the `pausable` API to `pause` and `resume` all syncing operations.
+
 ## Companion Libraries
 
 This library is meant to be built on. To that end, the following libraries are
@@ -131,6 +135,12 @@ will cleanly end processing.
 
 In this scenario, you will need to subscribe to the `cursorError` event and
 restart the process or handle otherwise.
+
+### Limit throughput to prevent overloading the destination database
+
+The `initialScan` and `processChangeStream` functions support throttling
+via the `batchQueue` options - `maxItemsPerSec` and `maxBytesPerSec`. See
+the [prom-utils](https://www.npmjs.com/package/prom-utils) library for more details.
 
 ## Change Stream Strategies
 
