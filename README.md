@@ -136,6 +136,12 @@ will cleanly end processing.
 In this scenario, you will need to subscribe to the `cursorError` event and
 restart the process or handle otherwise.
 
+### Limit throughput to prevent overloading the destination database
+
+The `initialScan` and `processChangeStream` functions support throttling
+via the `batchQueue` options - `maxItemsPerSec` and `maxBytesPerSec`. See
+the [prom-utils](https://www.npmjs.com/package/prom-utils) library for more details.
+
 ## Change Stream Strategies
 
 The idea behind these strategies is to prevent overwriting a document with
