@@ -98,6 +98,10 @@ See also the `missingOplogEntry` utility function that helps determine if an
 oplog entry is no longer present and resumption of a change stream from a previous
 point is not possible.
 
+It is recommended that you run a periodic check (e.g., every minute) to determine
+the health of the destination database that data is being synced to. If an issue
+is detected use the `pausable` API to `pause` and `resume` all syncing operations.
+
 ## Companion Libraries
 
 This library is meant to be built on. To that end, the following libraries are

@@ -1,6 +1,6 @@
 # 0.51.0
 
--   Added `pausable`
+-   Added `pausable` to `pause` and `resume` all syncing operations.
 -   Removed deprecated `shouldRemoveMetadata` option.
 
 # 0.50.0
