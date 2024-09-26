@@ -359,8 +359,8 @@ export function initSync<ExtendedEvents extends EventEmitter.ValidEventTypes>(
      * Get the change stream, resuming from a previous token if exists.
      */
     const getChangeStream = async () => {
-      const operationsPipeline = options.operationTypes
-        ? [{ $match: { operationType: { $in: options.operationTypes } } }]
+      const operationsPipeline = operationTypes
+        ? [{ $match: { operationType: { $in: operationTypes } } }]
         : []
       const omitPipeline = omit ? generatePipelineFromOmit(omit) : []
       const extendedPipeline = options.pipeline ?? []
