@@ -359,9 +359,16 @@ export function initSync<ExtendedEvents extends EventEmitter.ValidEventTypes>(
      * Get the change stream, resuming from a previous token if exists.
      */
     const getChangeStream = async () => {
+      const operationsPipeline = operationTypes
+        ? [{ $match: { operationType: { $in: operationTypes } } }]
+        : []
       const omitPipeline = omit ? generatePipelineFromOmit(omit) : []
       const extendedPipeline = options.pipeline ?? []
-      const pipeline = [...omitPipeline, ...extendedPipeline]
+      const pipeline = [
+        ...operationsPipeline,
+        ...omitPipeline,
+        ...extendedPipeline,
+      ]
       debug('Change stream pipeline %O', pipeline)
       // Lookup change stream token
       const token = await redis.get(keys.changeStreamTokenKey)
@@ -423,11 +430,6 @@ export function initSync<ExtendedEvents extends EventEmitter.ValidEventTypes>(
       while (await nextChecker.hasNext()) {
         event = await changeStream.next()
         debug('Change stream event %O', event)
-        // Skip the event if the operation type is not one we care about
-        if (operationTypes && !operationTypes.includes(event.operationType)) {
-          debug('Skipping operation type: %s', event.operationType)
-          continue
-        }
         // Omit nested fields that are not handled by $unset.
         // For example, if 'a' was omitted then 'a.b.c' should be omitted.
         if (

@@ -1,3 +1,7 @@
+# 0.52.0
+
+-   Use `$match` to filter `operationType`.
+
 # 0.51.0
 
 -   Added `pausable` to `pause` and `resume` all syncing operations.
