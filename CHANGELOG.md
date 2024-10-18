@@ -1,3 +1,7 @@
+# 0.53.0
+
+-   Add `documentKey` to pseudo `ChangeStreamInsertDocument` event for initial scan.
+
 # 0.52.0
 
 -   Use `$match` to filter `operationType`.

@@ -185,7 +185,7 @@ describe('syncing', () => {
     }
     const initialScan = await sync.runInitialScan(processRecords)
     initialScan.start()
-    await setTimeout(500)
+    await setTimeout(1000)
     // Stop twice
     await initialScan.stop()
     await initialScan.stop()

@@ -272,7 +272,8 @@ export function initSync<ExtendedEvents extends EventEmitter.ValidEventTypes>(
           fullDocument: doc,
           operationType: 'insert',
           ns,
-        } as unknown as ChangeStreamInsertDocument
+          documentKey: { _id: doc?._id },
+        } as ChangeStreamInsertDocument
         await queue.enqueue(changeStreamDoc)
         await pause.maybeBlock()
       }
