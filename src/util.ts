@@ -170,6 +170,6 @@ export const convertScanDoc = (collection: Collection) => {
       fullDocument: doc,
       operationType: 'insert',
       ns,
-      documentKey: { _id: doc?._id },
+      documentKey: { _id: doc._id },
     }) as ChangeStreamInsertDocument
 }
