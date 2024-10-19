@@ -208,15 +208,9 @@ describe('util', () => {
     }
     const result = convertScanDoc(collection)(doc)
     assert.deepEqual(result, {
-      fullDocument: {
-        _id: '123',
-        name: 'Joe',
-      },
+      fullDocument: { _id: '123', name: 'Joe' },
       operationType: 'insert',
-      ns: {
-        dbName: 'testdb',
-        collectionName: 'testcoll',
-      },
+      ns: { db: 'testdb', coll: 'testcoll' },
       documentKey: { _id: '123' },
     })
   })
