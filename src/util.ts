@@ -1,7 +1,9 @@
 import { set } from 'lodash'
 import {
+  ChangeStreamInsertDocument,
   type ChangeStreamUpdateDocument,
   type Collection,
+  Document,
   MongoServerError,
 } from 'mongodb'
 import { map, type Node, walkEach } from 'obj-walker'
@@ -156,4 +158,18 @@ export const delayed = (fn: (...args: any[]) => void, ms: number) => {
   }
 
   return delayedFn
+}
+
+/**
+ * Convert an initial scan document to a change steam insert event
+ */
+export const convertScanDoc = (collection: Collection) => {
+  const ns = { db: collection.dbName, coll: collection.collectionName }
+  return (doc: Document) =>
+    ({
+      fullDocument: doc,
+      operationType: 'insert',
+      ns,
+      documentKey: { _id: doc?._id },
+    }) as ChangeStreamInsertDocument
 }

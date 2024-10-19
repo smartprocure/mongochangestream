@@ -41,6 +41,7 @@ import {
   getCollectionKey,
   omitFieldsForUpdate,
   removeUnusedFields,
+  convertScanDoc,
   setDefaults,
   when,
 } from './util.js'
@@ -105,7 +106,7 @@ export function initSync<ExtendedEvents extends EventEmitter.ValidEventTypes>(
   }
   const emitStateChange = (change: object) => emit('stateChange', change)
   const pause = pausable(options.maxPauseTime)
-
+  const scanDocToChangeStream = convertScanDoc(collection)
   /**
    * Determine if the collection should be resynced by checking for the existence
    * of the resync key in Redis.
@@ -262,19 +263,12 @@ export function initSync<ExtendedEvents extends EventEmitter.ValidEventTypes>(
       // Change state
       state.change('started')
 
-      const ns = { db: collection.dbName, coll: collection.collectionName }
       const nextChecker = safelyCheckNext(cursor)
       let doc: Document | null
       // Process documents
       while ((doc = await nextChecker.getNext())) {
         debug('Initial scan doc %O', doc)
-        const changeStreamDoc = {
-          fullDocument: doc,
-          operationType: 'insert',
-          ns,
-          documentKey: { _id: doc?._id },
-        } as ChangeStreamInsertDocument
-        await queue.enqueue(changeStreamDoc)
+        await queue.enqueue(scanDocToChangeStream(doc))
         await pause.maybeBlock()
       }
       // Flush the queue
