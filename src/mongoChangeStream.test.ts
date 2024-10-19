@@ -152,6 +152,7 @@ describe('syncing', () => {
     }
     const changeStream = await sync.processChangeStream(processRecords)
     changeStream.start()
+    await setTimeout(100)
     // Change documents
     await coll.updateMany({}, { $set: { createdAt: new Date('2022-01-03') } })
     // Stop twice
