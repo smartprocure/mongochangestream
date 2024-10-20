@@ -152,6 +152,7 @@ describe('syncing', () => {
     }
     const changeStream = await sync.processChangeStream(processRecords)
     changeStream.start()
+    await setTimeout(500)
     // Change documents
     await coll.updateMany({}, { $set: { createdAt: new Date('2022-01-03') } })
     // Stop twice
@@ -185,7 +186,7 @@ describe('syncing', () => {
     }
     const initialScan = await sync.runInitialScan(processRecords)
     initialScan.start()
-    await setTimeout(500)
+    await setTimeout(1000)
     // Stop twice
     await initialScan.stop()
     await initialScan.stop()

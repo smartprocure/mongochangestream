@@ -1,7 +1,9 @@
+import { Collection } from 'mongodb'
 import assert from 'node:assert'
 import { describe, test } from 'node:test'
 
 import {
+  docToChangeStreamInsert,
   generatePipelineFromOmit,
   omitFieldsForUpdate,
   removeUnusedFields,
@@ -193,6 +195,23 @@ describe('util', () => {
       }
       omitFieldsForUpdate(['address.geo.lat'], event)
       assert.deepEqual(event, expected)
+    })
+  })
+  describe('docToChangeStreamInsert', () => {
+    const collection = {
+      dbName: 'testdb',
+      collectionName: 'testcoll',
+    } as Collection
+    const doc = {
+      _id: '123',
+      name: 'Joe',
+    }
+    const result = docToChangeStreamInsert(collection)(doc)
+    assert.deepEqual(result, {
+      fullDocument: { _id: '123', name: 'Joe' },
+      operationType: 'insert',
+      ns: { db: 'testdb', coll: 'testcoll' },
+      documentKey: { _id: '123' },
     })
   })
 })
