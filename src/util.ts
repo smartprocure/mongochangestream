@@ -161,9 +161,11 @@ export const delayed = (fn: (...args: any[]) => void, ms: number) => {
 }
 
 /**
- * Convert an initial scan document to a change steam insert event
+ * Convert an initial scan document to a change stream insert document
+ * suitable for downstream consumption. Note: not all fields are present,
+ * such as, _id (resume token).
  */
-export const convertScanDoc = (collection: Collection) => {
+export const docToChangeStreamInsert = (collection: Collection) => {
   const ns = { db: collection.dbName, coll: collection.collectionName }
   return (doc: Document) =>
     ({

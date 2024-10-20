@@ -3,7 +3,7 @@ import assert from 'node:assert'
 import { describe, test } from 'node:test'
 
 import {
-  convertScanDoc,
+  docToChangeStreamInsert,
   generatePipelineFromOmit,
   omitFieldsForUpdate,
   removeUnusedFields,
@@ -197,7 +197,7 @@ describe('util', () => {
       assert.deepEqual(event, expected)
     })
   })
-  describe('convertScanDoc', () => {
+  describe('docToChangeStreamInsert', () => {
     const collection = {
       dbName: 'testdb',
       collectionName: 'testcoll',
@@ -206,7 +206,7 @@ describe('util', () => {
       _id: '123',
       name: 'Joe',
     }
-    const result = convertScanDoc(collection)(doc)
+    const result = docToChangeStreamInsert(collection)(doc)
     assert.deepEqual(result, {
       fullDocument: { _id: '123', name: 'Joe' },
       operationType: 'insert',

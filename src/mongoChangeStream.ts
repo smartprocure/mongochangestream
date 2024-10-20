@@ -37,11 +37,11 @@ import {
   SyncOptions,
 } from './types.js'
 import {
+  docToChangeStreamInsert,
   generatePipelineFromOmit,
   getCollectionKey,
   omitFieldsForUpdate,
   removeUnusedFields,
-  convertScanDoc,
   setDefaults,
   when,
 } from './util.js'
@@ -106,7 +106,7 @@ export function initSync<ExtendedEvents extends EventEmitter.ValidEventTypes>(
   }
   const emitStateChange = (change: object) => emit('stateChange', change)
   const pause = pausable(options.maxPauseTime)
-  const scanDocToChangeStream = convertScanDoc(collection)
+  const toChangeStreamInsert = docToChangeStreamInsert(collection)
   /**
    * Determine if the collection should be resynced by checking for the existence
    * of the resync key in Redis.
@@ -268,7 +268,7 @@ export function initSync<ExtendedEvents extends EventEmitter.ValidEventTypes>(
       // Process documents
       while ((doc = await nextChecker.getNext())) {
         debug('Initial scan doc %O', doc)
-        await queue.enqueue(scanDocToChangeStream(doc))
+        await queue.enqueue(toChangeStreamInsert(doc))
         await pause.maybeBlock()
       }
       // Flush the queue
