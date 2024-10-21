@@ -18,7 +18,7 @@ import ms from 'ms'
 import assert from 'node:assert'
 import { describe, test } from 'node:test'
 import { setTimeout } from 'node:timers/promises'
-import type { QueueOptions, QueueStats } from 'prom-utils'
+import type { LastFlush, QueueOptions, QueueStats } from 'prom-utils'
 
 import { initSync } from './mongoChangeStream.js'
 import type {
@@ -242,8 +242,10 @@ describe('syncing', () => {
     await initState(sync, db, coll)
 
     let stats: QueueStats = { itemsPerSec: 0, bytesPerSec: 0 }
+    let lastFlush: LastFlush | undefined
     sync.emitter.on('stats', (event: StatsEvent) => {
       stats = event.stats
+      lastFlush = event.lastFlush
     })
 
     const processed = []
@@ -261,6 +263,7 @@ describe('syncing', () => {
     assert.equal(processed.length, numDocs)
     assert.ok(stats.itemsPerSec > 0 && stats.itemsPerSec < 250)
     assert.ok(stats.bytesPerSec > 0 && stats.bytesPerSec < 40000)
+    assert.deepEqual(lastFlush, { batchSize: 100 })
     // Stop
     await initialScan.stop()
   })
@@ -564,8 +567,10 @@ describe('syncing', () => {
     await initState(sync, db, coll)
 
     let stats: QueueStats = { itemsPerSec: 0, bytesPerSec: 0 }
+    let lastFlush: LastFlush | undefined
     sync.emitter.on('stats', (event: StatsEvent) => {
       stats = event.stats
+      lastFlush = event.lastFlush
     })
 
     const processed: any[] = []
@@ -597,6 +602,7 @@ describe('syncing', () => {
     assert.equal(processed.length, numDocs)
     assert.ok(stats.itemsPerSec > 0 && stats.itemsPerSec < 200)
     assert.ok(stats.bytesPerSec > 0 && stats.bytesPerSec < 80000)
+    assert.deepEqual(lastFlush, { batchSize: 100 })
     // Stop
     await changeStream.stop()
   })

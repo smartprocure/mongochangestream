@@ -1,4 +1,4 @@
-import {
+import type {
   AggregationCursor,
   ChangeStream,
   ChangeStreamDocument,
@@ -7,7 +7,7 @@ import {
   MongoAPIError,
   MongoServerError,
 } from 'mongodb'
-import { QueueStats } from 'prom-utils'
+import type { LastFlush, QueueStats } from 'prom-utils'
 
 export type Cursor = ChangeStream | AggregationCursor
 export type JSONSchema = Record<string, any>
@@ -122,6 +122,7 @@ export interface StatsEvent {
   type: 'stats'
   name: 'runInitialScan' | 'processChangeStream'
   stats: QueueStats
+  lastFlush?: LastFlush
 }
 
 // State

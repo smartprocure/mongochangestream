@@ -23,17 +23,20 @@ import {
 import { fsm, type StateTransitions } from 'simple-machines'
 
 import { safelyCheckNext } from './safelyCheckNext.js'
-import {
+import type {
   ChangeOptions,
   ChangeStreamOptions,
+  CursorErrorEvent,
   Events,
   JSONSchema,
   ProcessChangeStreamRecords,
   ProcessInitialScanRecords,
   ScanOptions,
+  SchemaChangeEvent,
   SimpleState,
   SortField,
   State,
+  StatsEvent,
   SyncOptions,
 } from './types.js'
 import {
@@ -254,7 +257,8 @@ export function initSync<ExtendedEvents extends EventEmitter.ValidEventTypes>(
         emit('stats', {
           name: 'runInitialScan',
           stats: queue.getStats(),
-        })
+          lastFlush: queue.lastFlush,
+        } as StatsEvent)
       }
       // Create queue
       const queue = batchQueue(_processRecords, options)
@@ -280,7 +284,7 @@ export function initSync<ExtendedEvents extends EventEmitter.ValidEventTypes>(
           emit('cursorError', {
             name: 'runInitialScan',
             error: nextChecker.getLastError(),
-          })
+          } as CursorErrorEvent)
         }
         // Exited cleanly from the loop so we're done
         else {
@@ -407,7 +411,8 @@ export function initSync<ExtendedEvents extends EventEmitter.ValidEventTypes>(
         emit('stats', {
           name: 'processChangeStream',
           stats: queue.getStats(),
-        })
+          lastFlush: queue.lastFlush,
+        } as StatsEvent)
       }
       // New deferred
       deferred = defer()
@@ -445,7 +450,7 @@ export function initSync<ExtendedEvents extends EventEmitter.ValidEventTypes>(
         emit('cursorError', {
           name: 'processChangeStream',
           error: nextChecker.getLastError(),
-        })
+        } as CursorErrorEvent)
       }
       deferred.done()
       debug('Exit change stream')
@@ -557,7 +562,10 @@ export function initSync<ExtendedEvents extends EventEmitter.ValidEventTypes>(
         // Persist schema
         await redis.set(keys.schemaKey, JSON.stringify(currentSchema))
         // Emit change
-        emit('schemaChange', { previousSchema, currentSchema })
+        emit('schemaChange', {
+          previousSchema,
+          currentSchema,
+        } as SchemaChangeEvent)
         // Previous schema is now the current schema
         previousSchema = currentSchema
       }
