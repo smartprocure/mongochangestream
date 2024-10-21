@@ -1,3 +1,8 @@
+# 0.54.0
+
+-   Bump packages, including latest `prom-utils` which adds `lastFlush` to `batchQueue`.
+-   Added `lastFlush` to `stats` event.
+
 # 0.53.0
 
 -   Add `documentKey` to pseudo `ChangeStreamInsertDocument` event for initial scan.
