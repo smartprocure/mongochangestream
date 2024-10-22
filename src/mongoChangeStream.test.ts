@@ -152,7 +152,7 @@ describe('syncing', () => {
     }
     const changeStream = await sync.processChangeStream(processRecords)
     changeStream.start()
-    await setTimeout(500)
+    await setTimeout(1000)
     // Change documents
     await coll.updateMany({}, { $set: { createdAt: new Date('2022-01-03') } })
     // Stop twice
@@ -193,20 +193,28 @@ describe('syncing', () => {
   })
 
   test('should complete initial scan', async () => {
-    const { coll, db } = await getConns()
+    const { coll, db, redis } = await getConns()
     const sync = await getSync()
     await initState(sync, db, coll)
 
     const processed = []
     const processRecords = async (docs: ChangeStreamInsertDocument[]) => {
       await setTimeout(50)
-      processed.push(...docs)
+      for (const doc of docs) {
+        // Simulate downstream mutation
+        delete doc._id
+        processed.push(doc)
+      }
     }
     const scanOptions = { batchSize: 100 }
     const initialScan = await sync.runInitialScan(processRecords, scanOptions)
     // Wait for initial scan to complete
     await initialScan.start()
     assert.equal(processed.length, numDocs)
+    // Check that Redis keys are set
+    assert.ok(await redis.get(sync.keys.lastScanIdKey))
+    assert.ok(await redis.get(sync.keys.lastScanProcessedAtKey))
+    assert.ok(await redis.get(sync.keys.scanCompletedKey))
     // Stop
     await initialScan.stop()
   })
@@ -494,7 +502,7 @@ describe('syncing', () => {
   })
 
   test('should process records via change stream', async () => {
-    const { coll, db } = await getConns()
+    const { coll, db, redis } = await getConns()
     const sync = await getSync()
     await initState(sync, db, coll)
 
@@ -506,6 +514,8 @@ describe('syncing', () => {
     const processRecords = async (docs: ChangeStreamDocument[]) => {
       for (const doc of docs) {
         await setTimeout(5)
+        // Simulate downstream mutation
+        delete doc._id
         processed.push(doc)
       }
     }
@@ -518,6 +528,9 @@ describe('syncing', () => {
     // Wait for the change stream events to be processed
     await setTimeout(ms('6s'))
     assert.equal(processed.length, numDocs)
+    // Check that Redis keys are set
+    assert.ok(await redis.get(sync.keys.changeStreamTokenKey))
+    assert.ok(await redis.get(sync.keys.lastChangeProcessedAtKey))
     // Stop
     await changeStream.stop()
     // Should not emit cursorError when stopping
