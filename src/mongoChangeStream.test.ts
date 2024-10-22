@@ -201,7 +201,12 @@ describe('syncing', () => {
     const processRecords = async (docs: ChangeStreamInsertDocument[]) => {
       await setTimeout(50)
       for (const doc of docs) {
-        // Simulate downstream mutation
+        // `processRecords` can mutate the documents in arbitrary ways,
+        // including deleting the `_id`, which would cause issues with
+        // continuing from where we last left off.
+        //
+        // This simulates that scenario, in order to test that the library
+        // handles it appropriately.
         delete doc._id
         processed.push(doc)
       }
