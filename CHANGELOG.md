@@ -1,3 +1,8 @@
+# 0.55.0
+
+-   Bug Fix: `processRecords` could mutate so we need to derive values for state
+    tracking prior to calling the function.
+
 # 0.54.0
 
 -   Bump packages, including latest `prom-utils` which adds `lastFlush` to `batchQueue`.

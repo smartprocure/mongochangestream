@@ -238,12 +238,14 @@ export function initSync<ExtendedEvents extends EventEmitter.ValidEventTypes>(
       }
 
       const _processRecords = async (records: ChangeStreamInsertDocument[]) => {
-        // Process batch of records
-        await processRecords(records)
-        debug('Processed %d records', records.length)
-        const lastDocument = records[records.length - 1].fullDocument
+        const numRecords = records.length
+        const lastDocument = records[numRecords - 1].fullDocument
         // Record last id of the batch
         const lastId = _.get(sortField.field, lastDocument)
+        // Process batch of records.
+        // NOTE: processRecords could mutate records.
+        await processRecords(records)
+        debug('Processed %d records', numRecords)
         debug('Last id %s', lastId)
         if (lastId) {
           await redis.mset(
@@ -393,10 +395,12 @@ export function initSync<ExtendedEvents extends EventEmitter.ValidEventTypes>(
       state.change('starting')
 
       const _processRecords = async (records: ChangeStreamDocument[]) => {
+        const numRecords = records.length
+        const token = records[numRecords - 1]._id
         // Process batch of records
+        // NOTE: processRecords could mutate records.
         await processRecords(records)
-        debug('Processed %d records', records.length)
-        const token = records[records.length - 1]._id
+        debug('Processed %d records', numRecords)
         debug('Token %s', token)
         if (token) {
           // Persist state
