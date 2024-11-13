@@ -586,6 +586,7 @@ describe('syncing', () => {
     let counter = 0
     const processed: any[] = []
     const processRecords = async (docs: ChangeStreamDocument[]) => {
+      // Simulate a failure on the first try
       if (counter++ === 0) {
         throw new Error('Fail')
       }
