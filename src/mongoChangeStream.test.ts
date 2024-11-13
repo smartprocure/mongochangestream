@@ -3,7 +3,7 @@
  * NOTE: Node version 22 or higher is required.
  */
 import { faker } from '@faker-js/faker'
-import Redis from 'ioredis'
+import { Redis } from 'ioredis'
 import _ from 'lodash/fp.js'
 import {
   type ChangeStreamDocument,
@@ -127,20 +127,7 @@ const initState = async (sync: SyncObj, db: Db, coll: Collection) => {
 }
 
 describe('syncing', () => {
-  test('starting change stream is idempotent', async () => {
-    const sync = await getSync()
-    // Change stream
-    const processRecords = async () => {
-      await setTimeout(5)
-    }
-    const changeStream = await sync.processChangeStream(processRecords)
-    // Start twice
-    changeStream.start()
-    changeStream.start()
-    await setTimeout(500)
-    await changeStream.stop()
-  })
-
+  // NOTE: This test is flaky
   test('stopping change stream is idempotent', async () => {
     const { coll, db } = await getConns()
     const sync = await getSync()
@@ -152,11 +139,24 @@ describe('syncing', () => {
     }
     const changeStream = await sync.processChangeStream(processRecords)
     changeStream.start()
-    await setTimeout(1000)
     // Change documents
     await coll.updateMany({}, { $set: { createdAt: new Date('2022-01-03') } })
     // Stop twice
     await changeStream.stop()
+    await changeStream.stop()
+  })
+
+  test('starting change stream is idempotent', async () => {
+    const sync = await getSync()
+    // Change stream
+    const processRecords = async () => {
+      await setTimeout(5)
+    }
+    const changeStream = await sync.processChangeStream(processRecords)
+    // Start twice
+    changeStream.start()
+    changeStream.start()
+    await setTimeout(500)
     await changeStream.stop()
   })
 
@@ -220,6 +220,37 @@ describe('syncing', () => {
     assert.ok(await redis.get(sync.keys.lastScanIdKey))
     assert.ok(await redis.get(sync.keys.lastScanProcessedAtKey))
     assert.ok(await redis.get(sync.keys.scanCompletedKey))
+    // Stop
+    await initialScan.stop()
+  })
+
+  test('should retry initial scan', async () => {
+    const { coll, db } = await getConns()
+    const options: SyncOptions = {
+      retry: {
+        minTimeout: 500,
+      },
+    }
+    const sync = await getSync(options)
+    await initState(sync, db, coll)
+
+    let counter = 0
+    const processed = []
+    const processRecords = async (docs: ChangeStreamInsertDocument[]) => {
+      await setTimeout(50)
+      // Simulate a failure
+      if (counter++ === 0) {
+        throw new Error('Fail')
+      }
+      processed.push(...docs)
+    }
+    const batchSize = 100
+    const initialScan = await sync.runInitialScan(processRecords, { batchSize })
+    // Wait for initial scan to complete
+    await initialScan.start()
+    assert.equal(processed.length, numDocs)
+    // Expect one extra call to processRecords
+    assert.equal(counter, numDocs / batchSize + 1)
     // Stop
     await initialScan.stop()
   })
@@ -540,6 +571,45 @@ describe('syncing', () => {
     await changeStream.stop()
     // Should not emit cursorError when stopping
     assert.equal(cursorError, false)
+  })
+
+  test('should retry processing change stream records', async () => {
+    const { coll, db } = await getConns()
+    const options: SyncOptions = {
+      retry: {
+        minTimeout: 500,
+      },
+    }
+    const sync = await getSync(options)
+    await initState(sync, db, coll)
+
+    let counter = 0
+    const processed: any[] = []
+    const processRecords = async (docs: ChangeStreamDocument[]) => {
+      if (counter++ === 0) {
+        throw new Error('Fail')
+      }
+      for (const doc of docs) {
+        await setTimeout(5)
+        processed.push(doc)
+      }
+    }
+    const batchSize = 100
+    const changeStream = await sync.processChangeStream(processRecords, {
+      batchSize,
+    })
+    // Start
+    changeStream.start()
+    await setTimeout(ms('1s'))
+    // Update records
+    coll.updateMany({}, { $set: { createdAt: new Date('2022-01-01') } })
+    // Wait for the change stream events to be processed
+    await setTimeout(ms('6s'))
+    assert.equal(processed.length, numDocs)
+    // Expect one extra call to processRecords
+    assert.equal(counter, numDocs / batchSize + 1)
+    // Stop
+    await changeStream.stop()
   })
 
   test('change stream should resume after pause in events', async () => {
