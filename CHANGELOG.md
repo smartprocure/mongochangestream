@@ -2,6 +2,7 @@
 
 -   Add retry logic to `processRecords`. Downstream libraries should only throw if
     the error is transient and can be retried with eventual success.
+-   Changed to ES module.
 
 # 0.55.0
 
