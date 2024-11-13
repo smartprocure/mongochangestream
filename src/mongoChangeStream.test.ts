@@ -127,7 +127,7 @@ const initState = async (sync: SyncObj, db: Db, coll: Collection) => {
 }
 
 describe('syncing', () => {
-  // NOTE: This test is flaky
+  // NOTE: This test is flaky. Having it run first seems to help :)
   test('stopping change stream is idempotent', async () => {
     const { coll, db } = await getConns()
     const sync = await getSync()
