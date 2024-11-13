@@ -238,7 +238,7 @@ describe('syncing', () => {
     const processed = []
     const processRecords = async (docs: ChangeStreamInsertDocument[]) => {
       await setTimeout(50)
-      // Simulate a failure
+      // Simulate a failure on the first try
       if (counter++ === 0) {
         throw new Error('Fail')
       }
