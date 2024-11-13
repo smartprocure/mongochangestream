@@ -7,6 +7,7 @@ import type {
   MongoAPIError,
   MongoServerError,
 } from 'mongodb'
+import { type Options as RetryOptions } from 'p-retry'
 import type { LastFlush, QueueStats } from 'prom-utils'
 
 export type Cursor = ChangeStream | AggregationCursor
@@ -39,6 +40,12 @@ export interface SyncOptions {
    * By default, pausing is indefinite.
    */
   maxPauseTime?: number
+  /**
+   * Options for handling retry logic when calling `processRecords`.
+   * Defaults to `{ minTimeout: 30s, maxTimeout: 1h, retries: 30 }`.
+   * Options passed here will be applied over the default options.
+   */
+  retry?: RetryOptions
 }
 
 export interface SortField<T> {

@@ -9,6 +9,7 @@ const debug = _debug('mongochangestream:safelyCheckNext')
  * Get the last error safely via `getLastError`.
  */
 export const safelyCheckNext = (cursor: Cursor) => {
+  debug('safelyCheckNext called')
   let lastError: unknown
 
   const getNext = async () => {

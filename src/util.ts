@@ -1,4 +1,4 @@
-import { set } from 'lodash'
+import lodash from 'lodash'
 import {
   ChangeStreamInsertDocument,
   type ChangeStreamUpdateDocument,
@@ -9,6 +9,8 @@ import {
 import { map, type Node, walkEach } from 'obj-walker'
 
 import type { CursorError, JSONSchema } from './types.js'
+
+const { set } = lodash
 
 export const setDefaults = (keys: string[], val: any) => {
   const obj: Record<string, any> = {}

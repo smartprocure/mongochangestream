@@ -1,3 +1,9 @@
+# 0.56.0
+
+-   Add retry logic to `processRecords`. Downstream libraries should only throw if
+    the error is transient and can be retried with eventual success.
+-   Changed to ES module.
+
 # 0.55.0
 
 -   Bug Fix: `processRecords` could mutate so we need to derive values for state

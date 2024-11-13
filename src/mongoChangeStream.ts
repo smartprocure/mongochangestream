@@ -1,5 +1,5 @@
 import _debug from 'debug'
-import EventEmitter from 'eventemitter3'
+import { EventEmitter } from 'eventemitter3'
 import type { Redis } from 'ioredis'
 import _ from 'lodash/fp.js'
 import {
@@ -13,6 +13,7 @@ import {
 } from 'mongodb'
 import * as mongodb from 'mongodb'
 import ms from 'ms'
+import retry, { type Options as RetryOptions } from 'p-retry'
 import {
   batchQueue,
   defer,
@@ -92,6 +93,14 @@ const simpleStateTransistions: StateTransitions<SimpleState> = {
 
 const stateFields = ['get', 'is'] as const
 
+const defaultRetryOptions: RetryOptions = {
+  minTimeout: ms('30s'),
+  maxTimeout: ms('1h'),
+  // This translates to retrying for up to 24 hours. It takes 7 retries
+  // to reach the maxTimeout of 1 hour.
+  retries: 30,
+}
+
 export function initSync<ExtendedEvents extends EventEmitter.ValidEventTypes>(
   redis: Redis,
   collection: Collection,
@@ -102,6 +111,10 @@ export function initSync<ExtendedEvents extends EventEmitter.ValidEventTypes>(
    */
   const keys = getKeys(collection, options)
   const { omit } = options
+  const retryOptions: RetryOptions = {
+    ...defaultRetryOptions,
+    ...options.retry,
+  }
   /** Event emitter */
   const emitter = new EventEmitter<Events | ExtendedEvents>()
   const emit = (event: Events, data: object) => {
@@ -244,7 +257,7 @@ export function initSync<ExtendedEvents extends EventEmitter.ValidEventTypes>(
         const lastId = _.get(sortField.field, lastDocument)
         // Process batch of records.
         // NOTE: processRecords could mutate records.
-        await processRecords(records)
+        await retry(() => processRecords(records), retryOptions)
         debug('Processed %d records', numRecords)
         debug('Last id %s', lastId)
         if (lastId) {
@@ -399,7 +412,7 @@ export function initSync<ExtendedEvents extends EventEmitter.ValidEventTypes>(
         const token = records[numRecords - 1]._id
         // Process batch of records
         // NOTE: processRecords could mutate records.
-        await processRecords(records)
+        await retry(() => processRecords(records), retryOptions)
         debug('Processed %d records', numRecords)
         debug('Token %s', token)
         if (token) {
@@ -427,8 +440,8 @@ export function initSync<ExtendedEvents extends EventEmitter.ValidEventTypes>(
       })
       // Start the change stream
       changeStream = await getChangeStream()
-      state.change('started')
       const nextChecker = safelyCheckNext(changeStream)
+      state.change('started')
       let event: ChangeStreamDocument | null
       // Consume change stream
       while (await nextChecker.hasNext()) {
