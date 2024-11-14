@@ -1,3 +1,9 @@
+# 0.57.0
+
+-   If `processRecords` repeatedly throws an error and all retries are
+    exhausted, mongochangestream will now catch the final error and emit an
+    `error` event.
+
 # 0.56.0
 
 -   Add retry logic to `processRecords`. Downstream libraries should only throw if

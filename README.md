@@ -93,10 +93,10 @@ const detectSchemaChange = async (db: Db, options: ChangeOptions = {})
 
 ## Maintaining Health
 
-Look for the `cursorError` event and restart the process or resync as needed.
-See also the `missingOplogEntry` utility function that helps determine if an
-oplog entry is no longer present and resumption of a change stream from a previous
-point is not possible.
+Look for the `error` and `cursorError` events and restart the process or resync
+as needed. See also the `missingOplogEntry` utility function that helps
+determine if an oplog entry is no longer present and resumption of a change
+stream from a previous point is not possible.
 
 It is recommended that you run a periodic check (e.g., every minute) to determine
 the health of the destination database that data is being synced to. If an issue
@@ -136,6 +136,20 @@ will cleanly end processing.
 In this scenario, you will need to subscribe to the `cursorError` event and
 restart the process or handle otherwise.
 
+### Handling other errors
+
+The `initialScan` and `processChangeStream` functions are designed to
+automatically retry the provided `processRecords` function when an error is
+thrown. This provides resilience in the event of transient issues like the
+database being temporarily unavailable. The retries are implemented using
+[p-retry](https://github.com/sindresorhus/p-retry). See `defaultRetryOptions`
+for default options. You can also customize the retry behavior by providing your
+own p-retry options (`options.retry`) to override the default settings.
+
+If the error is still happening once all the retries are exhausted, an `error`
+event is emitted. These represent persistent errors that require intervention of
+some kind.
+
 ### Limit throughput to prevent overloading the destination database
 
 The `initialScan` and `processChangeStream` functions support throttling
@@ -153,10 +167,6 @@ exist (i.e., perform a replace or an upsert).
 The initial scan returns a simulated change event document with `operationType`
 set to `insert`. An actual update change event will include the field-level changes
 in addition to the full document after the change.
-
-NOTE: Exceptions are not caught by this library. You must catch them in your
-`processRecords` callback and handle them accordingly. For example, an insert
-that fails due to a primary key already existing in the destination datastore.
 
 ### Elasticsearch
 

@@ -283,15 +283,21 @@ export function initSync<ExtendedEvents extends EventEmitter.ValidEventTypes>(
       state.change('started')
 
       const nextChecker = safelyCheckNext(cursor)
-      let doc: Document | null
-      // Process documents
-      while ((doc = await nextChecker.getNext())) {
-        debug('Initial scan doc %O', doc)
-        await queue.enqueue(toChangeStreamInsert(doc))
-        await pause.maybeBlock()
+
+      try {
+        let doc: Document | null
+        // Process documents
+        while ((doc = await nextChecker.getNext())) {
+          debug('Initial scan doc %O', doc)
+          await queue.enqueue(toChangeStreamInsert(doc))
+          await pause.maybeBlock()
+        }
+        // Flush the queue
+        await queue.flush()
+      } catch (e) {
+        emit('error', { error: e, initialScan: true })
       }
-      // Flush the queue
-      await queue.flush()
+
       // We are not stopping
       if (!state.is('stopping')) {
         // An error occurred getting next
@@ -442,26 +448,32 @@ export function initSync<ExtendedEvents extends EventEmitter.ValidEventTypes>(
       changeStream = await getChangeStream()
       const nextChecker = safelyCheckNext(changeStream)
       state.change('started')
-      let event: ChangeStreamDocument | null
-      // Consume change stream
-      while (await nextChecker.hasNext()) {
-        event = await changeStream.next()
-        debug('Change stream event %O', event)
-        // Omit nested fields that are not handled by $unset.
-        // For example, if 'a' was omitted then 'a.b.c' should be omitted.
-        if (
-          omit &&
-          event.operationType === 'update' &&
-          // Downstream libraries might unset event.updateDescription
-          // to optimize performance (e.g., mongo2elastic).
-          event.updateDescription
-        ) {
-          omitFieldsForUpdate(omit, event)
+
+      try {
+        let event: ChangeStreamDocument | null
+        // Consume change stream
+        while (await nextChecker.hasNext()) {
+          event = await changeStream.next()
+          debug('Change stream event %O', event)
+          // Omit nested fields that are not handled by $unset.
+          // For example, if 'a' was omitted then 'a.b.c' should be omitted.
+          if (
+            omit &&
+            event.operationType === 'update' &&
+            // Downstream libraries might unset event.updateDescription
+            // to optimize performance (e.g., mongo2elastic).
+            event.updateDescription
+          ) {
+            omitFieldsForUpdate(omit, event)
+          }
+          await queue.enqueue(event)
+          await pause.maybeBlock()
         }
-        await queue.enqueue(event)
-        await pause.maybeBlock()
+        await queue.flush()
+      } catch (e) {
+        emit('error', { error: e, changeStream: true })
       }
-      await queue.flush()
+
       // An error occurred getting next and we are not stopping
       if (nextChecker.errorExists() && !state.is('stopping')) {
         emit('cursorError', {

@@ -85,6 +85,7 @@ export interface ChangeOptions {
 // Events
 
 export type Events =
+  | 'error'
   | 'cursorError'
   | 'resync'
   | 'schemaChange'
