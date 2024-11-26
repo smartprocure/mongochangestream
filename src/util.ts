@@ -177,3 +177,24 @@ export const docToChangeStreamInsert = (collection: Collection) => {
       documentKey: { _id: doc._id },
     }) as ChangeStreamInsertDocument
 }
+
+/**
+ * Rename key, mutating the given document.
+ */
+const renameKey = (doc: Document, key: string, newKey: string) => {
+  const temp = doc[key]
+  delete doc[key]
+  doc[newKey] = temp
+}
+
+/**
+ * Rename keys, mutating the given document. Used in downstream libraries.
+ */
+export const renameKeys = (doc: Document, keys: Record<string, string>) => {
+  for (const key in keys) {
+    if (key in doc) {
+      const newKey = keys[key]
+      renameKey(doc, key, newKey)
+    }
+  }
+}
