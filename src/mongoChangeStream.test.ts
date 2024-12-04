@@ -224,6 +224,37 @@ describe('syncing', () => {
     await initialScan.stop()
   })
 
+  test('should emit processError after exhausting retries - initial scan', async () => {
+    const { coll, db } = await getConns()
+    const options: SyncOptions = {
+      retry: {
+        retries: 2,
+        minTimeout: 500,
+      },
+    }
+    const sync = await getSync(options)
+    await initState(sync, db, coll)
+
+    let processError = false
+    sync.emitter.on('processError', () => {
+      processError = true
+    })
+    const processRecords = async () => {
+      await setTimeout(50)
+      // Simulate a failure
+      throw new Error('Fail')
+    }
+    const batchSize = 100
+    const initialScan = await sync.runInitialScan(processRecords, {
+      batchSize,
+    })
+    // Wait for initial scan to complete
+    await initialScan.start()
+    assert.ok(processError)
+    // Stop
+    await initialScan.stop()
+  })
+
   test('should retry initial scan', async () => {
     const { coll, db } = await getConns()
     const options: SyncOptions = {
@@ -609,6 +640,41 @@ describe('syncing', () => {
     assert.equal(processed.length, numDocs)
     // Expect one extra call to processRecords
     assert.equal(counter, numDocs / batchSize + 1)
+    // Stop
+    await changeStream.stop()
+  })
+
+  test('should emit error after exhausting retries - change stream', async () => {
+    const { coll, db } = await getConns()
+    const options: SyncOptions = {
+      retry: {
+        retries: 2,
+        minTimeout: 100,
+      },
+    }
+    const sync = await getSync(options)
+    await initState(sync, db, coll)
+
+    let processError = false
+    sync.emitter.on('processError', () => {
+      processError = true
+    })
+    const processRecords = async () => {
+      // Simulate a failure
+      throw new Error('Fail')
+    }
+    const batchSize = 100
+    const changeStream = await sync.processChangeStream(processRecords, {
+      batchSize,
+    })
+    // Start
+    changeStream.start()
+    await setTimeout(ms('1s'))
+    // Update records
+    coll.updateMany({}, { $set: { createdAt: new Date('2022-01-01') } })
+    // Wait for the change stream events to be processed
+    await setTimeout(ms('6s'))
+    assert.ok(processError)
     // Stop
     await changeStream.stop()
   })

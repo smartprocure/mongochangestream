@@ -257,7 +257,11 @@ export function initSync<ExtendedEvents extends EventEmitter.ValidEventTypes>(
         const lastId = _.get(sortField.field, lastDocument)
         // Process batch of records.
         // NOTE: processRecords could mutate records.
-        await retry(() => processRecords(records), retryOptions)
+        try {
+          await retry(() => processRecords(records), retryOptions)
+        } catch (error) {
+          emit('processError', { error })
+        }
         debug('Processed %d records', numRecords)
         debug('Last id %s', lastId)
         if (lastId) {
@@ -412,7 +416,11 @@ export function initSync<ExtendedEvents extends EventEmitter.ValidEventTypes>(
         const token = records[numRecords - 1]._id
         // Process batch of records
         // NOTE: processRecords could mutate records.
-        await retry(() => processRecords(records), retryOptions)
+        try {
+          await retry(() => processRecords(records), retryOptions)
+        } catch (error) {
+          emit('processError', { error })
+        }
         debug('Processed %d records', numRecords)
         debug('Token %s', token)
         if (token) {

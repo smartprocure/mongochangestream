@@ -91,6 +91,7 @@ export type Events =
   | 'stateChange'
   | 'initialScanComplete'
   | 'stats'
+  | 'processError'
 
 export interface ResyncEvent {
   type: 'resync'
@@ -119,6 +120,11 @@ export interface CursorErrorEvent {
   type: 'cursorError'
   name: 'runInitialScan' | 'processChangeStream'
   error: CursorError
+}
+
+export interface ProcessErrorEvent {
+  type: 'processError'
+  error: unknown
 }
 
 /**
