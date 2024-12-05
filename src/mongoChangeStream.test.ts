@@ -244,10 +244,7 @@ describe('syncing', () => {
       // Simulate a failure
       throw new Error('Fail')
     }
-    const batchSize = 100
-    const initialScan = await sync.runInitialScan(processRecords, {
-      batchSize,
-    })
+    const initialScan = await sync.runInitialScan(processRecords)
     // Wait for initial scan to complete
     await initialScan.start()
     assert.equal(processErrorCount, 1)
@@ -663,10 +660,7 @@ describe('syncing', () => {
       // Simulate a failure
       throw new Error('Fail')
     }
-    const batchSize = 100
-    const changeStream = await sync.processChangeStream(processRecords, {
-      batchSize,
-    })
+    const changeStream = await sync.processChangeStream(processRecords)
     // Start
     changeStream.start()
     await setTimeout(ms('1s'))
