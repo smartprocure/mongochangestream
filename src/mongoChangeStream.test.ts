@@ -494,12 +494,12 @@ describe('syncing', () => {
     await initialScan.stop()
   })
 
-  test('initial scan should resume after stop',{only: true} ,async () => {
+  test('initial scan should resume after stop', async () => {
     const { coll, db } = await getConns()
     const sync = await getSync()
     await initState(sync, db, coll)
 
-    const processed = []
+    const processed: unknown[] = []
     const processRecords = async (docs: ChangeStreamInsertDocument[]) => {
       await setTimeout(50)
       processed.push(...docs)
