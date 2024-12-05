@@ -179,6 +179,7 @@ export function initSync<ExtendedEvents extends EventEmitter.ValidEventTypes>(
     options: QueueOptions & ScanOptions<T> = {}
   ) {
     let deferred: Deferred
+    const retryController = new AbortController()
     let cursor: ReturnType<typeof collection.aggregate>
     const state = fsm(stateTransitions, 'stopped', {
       name: 'runInitialScan',
@@ -255,22 +256,28 @@ export function initSync<ExtendedEvents extends EventEmitter.ValidEventTypes>(
         const lastDocument = records[numRecords - 1].fullDocument
         // Record last id of the batch
         const lastId = _.get(sortField.field, lastDocument)
-        // Process batch of records.
+        // Process batch of records with retries.
         // NOTE: processRecords could mutate records.
         try {
-          await retry(() => processRecords(records), retryOptions)
+          await retry(() => processRecords(records), {
+            ...retryOptions,
+            signal: retryController.signal,
+          })
+          debug('Processed %d records', numRecords)
+          debug('Last id %s', lastId)
+          if (lastId) {
+            await redis.mset(
+              keys.lastScanIdKey,
+              sortField.serialize(lastId),
+              keys.lastScanProcessedAtKey,
+              new Date().getTime()
+            )
+          }
         } catch (error) {
-          emit('processError', { error, name: 'runInitialScan' })
-        }
-        debug('Processed %d records', numRecords)
-        debug('Last id %s', lastId)
-        if (lastId) {
-          await redis.mset(
-            keys.lastScanIdKey,
-            sortField.serialize(lastId),
-            keys.lastScanProcessedAtKey,
-            new Date().getTime()
-          )
+          debug('Retry error %o', error)
+          if (!state.is('stopping')) {
+            emit('processError', { error, name: 'processChangeStream' })
+          }
         }
         // Emit stats
         emit('stats', {
@@ -332,6 +339,9 @@ export function initSync<ExtendedEvents extends EventEmitter.ValidEventTypes>(
         await state.waitForChange('started')
       }
       state.change('stopping')
+      // Abort retries
+      retryController.abort('stopping')
+      debug('Retry controller aborted')
       // Close the cursor
       await cursor?.close()
       debug('MongoDB cursor closed')
@@ -364,6 +374,7 @@ export function initSync<ExtendedEvents extends EventEmitter.ValidEventTypes>(
     options: QueueOptions & ChangeStreamOptions = {}
   ) => {
     let deferred: Deferred
+    const retryController = new AbortController()
     let changeStream: ChangeStream
     const state = fsm(stateTransitions, 'stopped', {
       name: 'processChangeStream',
@@ -414,23 +425,29 @@ export function initSync<ExtendedEvents extends EventEmitter.ValidEventTypes>(
       const _processRecords = async (records: ChangeStreamDocument[]) => {
         const numRecords = records.length
         const token = records[numRecords - 1]._id
-        // Process batch of records
+        // Process batch of records with retries.
         // NOTE: processRecords could mutate records.
         try {
-          await retry(() => processRecords(records), retryOptions)
+          await retry(() => processRecords(records), {
+            ...retryOptions,
+            signal: retryController.signal,
+          })
+          debug('Processed %d records', numRecords)
+          debug('Token %s', token)
+          if (token) {
+            // Persist state
+            await redis.mset(
+              keys.changeStreamTokenKey,
+              JSON.stringify(token),
+              keys.lastChangeProcessedAtKey,
+              new Date().getTime()
+            )
+          }
         } catch (error) {
-          emit('processError', { error, name: 'processChangeStream' })
-        }
-        debug('Processed %d records', numRecords)
-        debug('Token %s', token)
-        if (token) {
-          // Persist state
-          await redis.mset(
-            keys.changeStreamTokenKey,
-            JSON.stringify(token),
-            keys.lastChangeProcessedAtKey,
-            new Date().getTime()
-          )
+          debug('Retry error %o', error)
+          if (!state.is('stopping')) {
+            emit('processError', { error, name: 'processChangeStream' })
+          }
         }
         // Emit stats
         emit('stats', {
@@ -494,6 +511,9 @@ export function initSync<ExtendedEvents extends EventEmitter.ValidEventTypes>(
         await state.waitForChange('started')
       }
       state.change('stopping')
+      // Abort retries
+      retryController.abort('stopping')
+      debug('Retry controller aborted')
       // Close the change stream
       await changeStream?.close()
       debug('MongoDB change stream closed')
