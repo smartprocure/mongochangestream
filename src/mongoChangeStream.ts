@@ -260,7 +260,7 @@ export function initSync<ExtendedEvents extends EventEmitter.ValidEventTypes>(
         try {
           await retry(() => processRecords(records), retryOptions)
         } catch (error) {
-          emit('processError', { error })
+          emit('processError', { error, name: 'runInitialScan' })
         }
         debug('Processed %d records', numRecords)
         debug('Last id %s', lastId)
@@ -419,7 +419,7 @@ export function initSync<ExtendedEvents extends EventEmitter.ValidEventTypes>(
         try {
           await retry(() => processRecords(records), retryOptions)
         } catch (error) {
-          emit('processError', { error })
+          emit('processError', { error, name: 'processChangeStream' })
         }
         debug('Processed %d records', numRecords)
         debug('Token %s', token)

@@ -235,9 +235,9 @@ describe('syncing', () => {
     const sync = await getSync(options)
     await initState(sync, db, coll)
 
-    let processError = false
+    let processErrorCount = 0
     sync.emitter.on('processError', () => {
-      processError = true
+      processErrorCount++
     })
     const processRecords = async () => {
       await setTimeout(50)
@@ -250,7 +250,7 @@ describe('syncing', () => {
     })
     // Wait for initial scan to complete
     await initialScan.start()
-    assert.ok(processError)
+    assert.equal(processErrorCount, 1)
     // Stop
     await initialScan.stop()
   })
@@ -655,9 +655,9 @@ describe('syncing', () => {
     const sync = await getSync(options)
     await initState(sync, db, coll)
 
-    let processError = false
+    let processErrorCount = 0
     sync.emitter.on('processError', () => {
-      processError = true
+      processErrorCount++
     })
     const processRecords = async () => {
       // Simulate a failure
@@ -674,7 +674,7 @@ describe('syncing', () => {
     coll.updateMany({}, { $set: { createdAt: new Date('2022-01-01') } })
     // Wait for the change stream events to be processed
     await setTimeout(ms('6s'))
-    assert.ok(processError)
+    assert.equal(processErrorCount, 1)
     // Stop
     await changeStream.stop()
   })

@@ -124,6 +124,7 @@ export interface CursorErrorEvent {
 
 export interface ProcessErrorEvent {
   type: 'processError'
+  name: 'runInitialScan' | 'processChangeStream'
   error: unknown
 }
 
