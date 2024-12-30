@@ -274,7 +274,7 @@ export function initSync<ExtendedEvents extends EventEmitter.ValidEventTypes>(
             )
           }
         } catch (error) {
-          debug('Retry error %o', error)
+          debug('Process error %o', error)
           if (!state.is('stopping')) {
             emit('processError', { error, name: 'processChangeStream' })
           }
@@ -444,7 +444,7 @@ export function initSync<ExtendedEvents extends EventEmitter.ValidEventTypes>(
             )
           }
         } catch (error) {
-          debug('Retry error %o', error)
+          debug('Process error %o', error)
           if (!state.is('stopping')) {
             emit('processError', { error, name: 'processChangeStream' })
           }
