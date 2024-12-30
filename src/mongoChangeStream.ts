@@ -276,7 +276,7 @@ export function initSync<ExtendedEvents extends EventEmitter.ValidEventTypes>(
         } catch (error) {
           debug('Process error %o', error)
           if (!state.is('stopping')) {
-            emit('processError', { error, name: 'processChangeStream' })
+            emit('processError', { error, name: 'runInitialScan' })
           }
         }
         // Emit stats
