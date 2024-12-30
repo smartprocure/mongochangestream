@@ -339,12 +339,12 @@ export function initSync<ExtendedEvents extends EventEmitter.ValidEventTypes>(
         await state.waitForChange('started')
       }
       state.change('stopping')
-      debug('Retry controller aborted')
       // Close the cursor
       await cursor?.close()
       debug('MongoDB cursor closed')
       // Abort retries
       retryController.abort('stopping')
+      debug('Retry controller aborted')
       // Wait for start fn to finish
       await deferred?.promise
       state.change('stopped')
@@ -511,12 +511,12 @@ export function initSync<ExtendedEvents extends EventEmitter.ValidEventTypes>(
         await state.waitForChange('started')
       }
       state.change('stopping')
-      debug('Retry controller aborted')
       // Close the change stream
       await changeStream?.close()
       debug('MongoDB change stream closed')
       // Abort retries
       retryController.abort('stopping')
+      debug('Retry controller aborted')
       // Wait for start fn to finish
       await deferred?.promise
       state.change('stopped')
