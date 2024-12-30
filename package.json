@@ -49,6 +49,7 @@
     "@types/node": "^22.10.1",
     "@typescript-eslint/eslint-plugin": "^8.17.0",
     "globals": "^15.13.0",
+    "mongochangestream-testing": "^0.1.0",
     "prettier": "^3.4.2",
     "typescript": "^5.7.2"
   },

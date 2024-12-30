@@ -2,14 +2,12 @@
  * To run add a local .env file with MONGO_CONN and execute npm test.
  * NOTE: Node version 22 or higher is required.
  */
-import { faker } from '@faker-js/faker'
 import { Redis } from 'ioredis'
 import _ from 'lodash/fp.js'
+import { genUser, initState, numDocs, schema } from 'mongochangestream-testing'
 import {
   type ChangeStreamDocument,
   type ChangeStreamInsertDocument,
-  type Collection,
-  type Db,
   type Document,
   MongoClient,
   ObjectId,
@@ -23,7 +21,6 @@ import type { LastFlush, QueueOptions, QueueStats } from 'prom-utils'
 import { initSync } from './mongoChangeStream.js'
 import type {
   CursorErrorEvent,
-  JSONSchema,
   ScanOptions,
   SchemaChangeEvent,
   SortField,
@@ -47,83 +44,6 @@ const getSync = async (options?: SyncOptions) => {
   const sync = initSync(redis, coll, options)
   sync.emitter.on('stateChange', console.log)
   return sync
-}
-
-const genUser = () => ({
-  name: faker.person.fullName(),
-  likes: [faker.animal.dog(), faker.animal.cat()],
-  address: {
-    city: faker.location.city(),
-    state: faker.location.state(),
-    zipCode: faker.location.zipCode(),
-    geo: {
-      lat: faker.location.latitude(),
-      long: faker.location.longitude(),
-    },
-  },
-  createdAt: faker.date.past(),
-})
-
-const schema: JSONSchema = {
-  bsonType: 'object',
-  additionalProperties: false,
-  required: ['name'],
-  properties: {
-    _id: { bsonType: 'objectId' },
-    name: { bsonType: 'string' },
-    likes: {
-      bsonType: 'array',
-      items: {
-        bsonType: 'string',
-      },
-    },
-    address: {
-      bsonType: 'object',
-      properties: {
-        city: { bsonType: 'string' },
-        state: { bsonType: 'string' },
-        zipCode: { bsonType: 'string' },
-        geo: {
-          bsonType: 'object',
-          properties: {
-            lat: {
-              bsonType: 'number',
-            },
-            long: {
-              bsonType: 'number',
-            },
-          },
-        },
-      },
-    },
-    createdAt: { bsonType: 'date' },
-  },
-}
-
-const numDocs = 500
-
-const populateCollection = (collection: Collection, count = numDocs) => {
-  const users = []
-  for (let i = 0; i < count; i++) {
-    users.push({ insertOne: { document: genUser() } })
-  }
-  return collection.bulkWrite(users)
-}
-
-type SyncObj = Awaited<ReturnType<typeof getSync>>
-
-const initState = async (sync: SyncObj, db: Db, coll: Collection) => {
-  // Clear syncing state
-  await sync.reset()
-  // Delete all documents
-  await coll.deleteMany({})
-  // Set schema
-  await db.command({
-    collMod: coll.collectionName,
-    validator: { $jsonSchema: schema },
-  })
-  // Populate data
-  await populateCollection(coll)
 }
 
 describe('syncing', () => {
