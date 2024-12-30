@@ -1,3 +1,7 @@
+# 0.58.0
+
+- Wrap retry in try/catch and emit `processError` on exception.
+
 # 0.57.0
 
 - Added `renameKeys` utility function used in downstream libraries.
