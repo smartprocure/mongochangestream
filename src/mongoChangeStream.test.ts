@@ -1,7 +1,3 @@
-/**
- * To run add a local .env file with MONGO_CONN and execute npm test.
- * NOTE: Node version 22 or higher is required.
- */
 import { Redis } from 'ioredis'
 import _ from 'lodash/fp.js'
 import { genUser, initState, numDocs, schema } from 'mongochangestream-testing'

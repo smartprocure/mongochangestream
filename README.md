@@ -237,3 +237,21 @@ db.collection('someColl').replaceOne({_id: ObjectId(...)}, ..., {upsert: true})
 ```js
 db.collection('someColl').deleteOne({_id: ObjectId(...)})
 ```
+
+## Running tests
+
+There are tests in this repo that can be run with `npm test`. The tests require
+a running MongoDB instance and a running Redis instance.
+
+By default, the tests will attempt to connect to Mongo at `localhost:27017` and
+Redis at `localhost:6379`. You can override the Mongo connection string by
+setting the `MONGO_CONN` environment variable, e.g. in a `.env` file.
+
+> [!TIP]
+> Before running the tests, make sure you:
+>
+> - ...have Node version 22 or higher installed.
+> - ...have a MongoDB instance running and `MONGO_CONN` set to the connection
+>   string.
+> - ...have a Redis instance running on `localhost:6379`.
+> - ...are running `npm build:watch` to compile the TypeScript to JavaScript.
