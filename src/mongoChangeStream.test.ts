@@ -10,9 +10,9 @@ import {
 } from 'mongodb'
 import ms from 'ms'
 import assert from 'node:assert'
-import { describe, test } from 'node:test'
 import { setTimeout } from 'node:timers/promises'
 import type { LastFlush, QueueOptions, QueueStats } from 'prom-utils'
+import { describe, test } from 'vitest'
 
 import { initSync } from './mongoChangeStream.js'
 import type {
@@ -42,7 +42,7 @@ const getSync = async (options?: SyncOptions) => {
   return sync
 }
 
-describe('syncing', () => {
+describe.sequential('syncing', () => {
   // NOTE: This test is flaky. Having it run first seems to help :)
   test('stopping change stream is idempotent', async () => {
     const { coll, db } = await getConns()

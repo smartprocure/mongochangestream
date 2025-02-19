@@ -254,4 +254,3 @@ setting the `MONGO_CONN` environment variable, e.g. in a `.env` file.
 > - ...have a MongoDB instance running and `MONGO_CONN` set to the connection
 >   string.
 > - ...have a Redis instance running on `localhost:6379`.
-> - ...are running `npm build:watch` to compile the TypeScript to JavaScript.

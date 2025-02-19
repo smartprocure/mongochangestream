@@ -1,6 +1,6 @@
 import { Collection } from 'mongodb'
 import assert from 'node:assert'
-import { describe, test } from 'node:test'
+import { describe, test } from 'vitest'
 
 import {
   docToChangeStreamInsert,
@@ -198,20 +198,22 @@ describe('util', () => {
     })
   })
   describe('docToChangeStreamInsert', () => {
-    const collection = {
-      dbName: 'testdb',
-      collectionName: 'testcoll',
-    } as Collection
-    const doc = {
-      _id: '123',
-      name: 'Joe',
-    }
-    const result = docToChangeStreamInsert(collection)(doc)
-    assert.deepEqual(result, {
-      fullDocument: { _id: '123', name: 'Joe' },
-      operationType: 'insert',
-      ns: { db: 'testdb', coll: 'testcoll' },
-      documentKey: { _id: '123' },
+    test('should produce a correct change stream "insert" event', () => {
+      const collection = {
+        dbName: 'testdb',
+        collectionName: 'testcoll',
+      } as Collection
+      const doc = {
+        _id: '123',
+        name: 'Joe',
+      }
+      const result = docToChangeStreamInsert(collection)(doc)
+      assert.deepEqual(result, {
+        fullDocument: { _id: '123', name: 'Joe' },
+        operationType: 'insert',
+        ns: { db: 'testdb', coll: 'testcoll' },
+        documentKey: { _id: '123' },
+      })
     })
   })
 })
