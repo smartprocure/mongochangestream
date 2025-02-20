@@ -14,7 +14,7 @@ import { setTimeout } from 'node:timers/promises'
 import type { LastFlush, QueueOptions, QueueStats } from 'prom-utils'
 import { describe, test } from 'vitest'
 
-import { initSync } from './mongoChangeStream.js'
+import { getKeys, initSync } from './mongoChangeStream.js'
 import type {
   CursorErrorEvent,
   ScanOptions,
@@ -40,6 +40,63 @@ const getSync = async (options?: SyncOptions) => {
   const sync = initSync(redis, coll, options)
   sync.emitter.on('stateChange', console.log)
   return sync
+}
+
+/**
+ * Repeatedly checks the provided predicate until it either returns true or the
+ * timeout is reached.
+ *
+ * @param pred - The predicate to check: an async function returning a boolean.
+ * @param timeout - The maximum time to wait for the predicate to return true.
+ * @param interval - The time to wait between checks.
+ *
+ * @returns true if the predicate returned true before the timeout, false
+ * otherwise.
+ */
+const eventually = async (
+  pred: () => Promise<boolean>,
+  timeout: number,
+  interval: number
+) => {
+  const start = Date.now()
+
+  while (Date.now() - start < timeout) {
+    if (await pred()) {
+      return true
+    }
+    await setTimeout(interval)
+  }
+
+  return false
+}
+
+interface AssertEventuallyOptions {
+  /** The maximum time to wait for the predicate to return true. */
+  timeout?: number
+  /** The time to wait between checks. */
+  interval?: number
+  /** The message to use if the assertion fails after the timeout. */
+  message?: string
+}
+
+/**
+ * Asserts that the provided predicate eventually returns true.
+ *
+ * @param pred - The predicate to check: an async function returning a boolean.
+ * @param options - @see AssertEventuallyOptions
+ *
+ * @throws AssertionError if the predicate does not return true before the
+ * timeout.
+ */
+const assertEventually = async (
+  pred: () => Promise<boolean>,
+  options: AssertEventuallyOptions = {}
+) => {
+  const { timeout, interval, message } = options
+  assert.ok(
+    await eventually(pred, timeout ?? ms('30s'), interval ?? ms('50ms')),
+    message
+  )
 }
 
 describe.sequential('syncing', () => {
@@ -1207,5 +1264,49 @@ describe.sequential('syncing', () => {
     })
     sync.emitter.emit('foo', 'bar')
     assert.strictEqual(emitted, 'bar')
+  })
+
+  test('should update the resume token, even if there were no records updated', async () => {
+    const { coll, db, redis } = await getConns()
+    const sync = await getSync()
+    await initState(sync, db, coll)
+    const processRecords = async () => {
+      await setTimeout(5)
+    }
+
+    // Utilities for comparing resume tokens to see if they change over time.
+    let lastToken: string | null = null
+    const { changeStreamTokenKey } = getKeys(coll, {})
+    const getCurrentToken = async () => await redis.get(changeStreamTokenKey)
+    const assertResumeTokenUpdated = async (when: string) =>
+      await assertEventually(
+        async () => (await getCurrentToken()) !== lastToken,
+        { message: `Resume token was not updated ${when}` }
+      )
+
+    // The resume token should initially be null, since we ran `initState`
+    // above.
+    lastToken = await getCurrentToken()
+    assert.equal(lastToken, null)
+
+    const changeStream = await sync.processChangeStream(processRecords)
+    changeStream.start()
+    // Let change stream connect
+    await setTimeout(ms('1s'))
+
+    // Waiting for a while should result in an updated resume token.
+    await assertResumeTokenUpdated('after waiting')
+
+    // Updating records results in an updated resume token.
+    lastToken = await getCurrentToken()
+    await coll.updateMany({}, { $set: { createdAt: new Date('2022-01-03') } })
+    await assertResumeTokenUpdated('after updating records')
+
+    // Waiting for a while after an update should result in the resume token
+    // updating again.
+    lastToken = await getCurrentToken()
+    await assertResumeTokenUpdated('after waiting again after an update')
+
+    await changeStream.stop()
   })
 })
