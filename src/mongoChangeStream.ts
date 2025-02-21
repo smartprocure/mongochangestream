@@ -480,7 +480,7 @@ export function initSync<ExtendedEvents extends EventEmitter.ValidEventTypes>(
       state.change('started')
 
       // Consume change stream until there is an error or `stop` is called.
-      while (!state.is('stopping')) {
+      while (!state.is('stopping', 'stopped')) {
         // This always updates `changeStream.resumeToken`, even when we reach
         // the end of the change stream and null is returned.
         //
