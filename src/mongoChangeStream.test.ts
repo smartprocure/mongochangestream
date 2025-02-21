@@ -1275,19 +1275,29 @@ describe.sequential('syncing', () => {
     }
 
     // Utilities for comparing resume tokens to see if they change over time.
-    let lastToken: string | null = null
     const { changeStreamTokenKey } = getKeys(coll, {})
     const getCurrentToken = async () => await redis.get(changeStreamTokenKey)
-    const assertResumeTokenUpdated = async (when: string) =>
+    const assertResumeTokenUpdated = async (
+      lastToken: string | null,
+      when: string
+    ): Promise<string | null> => {
+      let currentToken: string | null = null
+
       await assertEventually(
-        async () => (await getCurrentToken()) !== lastToken,
+        async () => {
+          currentToken = await getCurrentToken()
+          return currentToken !== lastToken
+        },
         { message: `Resume token was not updated ${when}` }
       )
 
+      return currentToken
+    }
+
     // The resume token should initially be null, since we ran `initState`
     // above.
-    lastToken = await getCurrentToken()
-    assert.equal(lastToken, null)
+    let token = await getCurrentToken()
+    assert.equal(token, null)
 
     const changeStream = await sync.processChangeStream(processRecords)
     changeStream.start()
@@ -1295,17 +1305,18 @@ describe.sequential('syncing', () => {
     await setTimeout(ms('1s'))
 
     // Waiting for a while should result in an updated resume token.
-    await assertResumeTokenUpdated('after waiting')
+    token = await assertResumeTokenUpdated(token, 'after waiting')
 
     // Updating records results in an updated resume token.
-    lastToken = await getCurrentToken()
     await coll.updateMany({}, { $set: { createdAt: new Date('2022-01-03') } })
-    await assertResumeTokenUpdated('after updating records')
+    token = await assertResumeTokenUpdated(token, 'after updating records')
 
     // Waiting for a while after an update should result in the resume token
     // updating again.
-    lastToken = await getCurrentToken()
-    await assertResumeTokenUpdated('after waiting again after an update')
+    token = await assertResumeTokenUpdated(
+      token,
+      'after waiting again after an update'
+    )
 
     await changeStream.stop()
   })
