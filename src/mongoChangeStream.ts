@@ -429,10 +429,9 @@ export function initSync<ExtendedEvents extends EventEmitter.ValidEventTypes>(
       const _processRecords = async (
         maybeRecords: (ChangeStreamDocument | null)[]
       ) => {
-        // Each item in `maybeRecords` is either an actual record, or null. The
-        // last item in the array can be null, which is a signal that we have
-        // reached the end of the change stream and we just need to update the
-        // resume token in Redis.
+        // Each item in `maybeRecords` is either an actual record, or null. Null
+        // is a signal that we have reached the end of the change stream and we
+        // just need to update the resume token in Redis.
         const records = maybeRecords.filter((record) => record != null)
 
         // Process batch of records with retries.
@@ -510,12 +509,6 @@ export function initSync<ExtendedEvents extends EventEmitter.ValidEventTypes>(
         await queue.enqueue(event)
         await pause.maybeBlock()
 
-        if (!event) {
-          // The null event (i.e. "end of change stream") is always the last
-          // event in the batch. See `_processRecords`.
-          await queue.flush()
-        }
-
         if (nextChecker.errorExists() && !state.is('stopping')) {
           emit('cursorError', {
             name: 'processChangeStream',
@@ -524,6 +517,8 @@ export function initSync<ExtendedEvents extends EventEmitter.ValidEventTypes>(
           break
         }
       }
+
+      await queue.flush()
 
       // Signal stopping => stopped state change
       deferred.done()

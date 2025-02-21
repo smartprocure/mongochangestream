@@ -1299,7 +1299,9 @@ describe.sequential('syncing', () => {
     let token = await getCurrentToken()
     assert.equal(token, null)
 
-    const changeStream = await sync.processChangeStream(processRecords)
+    const changeStream = await sync.processChangeStream(processRecords, {
+      timeout: ms('5s'),
+    })
     changeStream.start()
     // Let change stream connect
     await setTimeout(ms('1s'))
