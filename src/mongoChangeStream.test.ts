@@ -11,7 +11,13 @@ import {
 import ms from 'ms'
 import assert from 'node:assert'
 import { setTimeout } from 'node:timers/promises'
-import type { LastFlush, QueueOptions, QueueStats } from 'prom-utils'
+import {
+  type LastFlush,
+  type QueueOptions,
+  type QueueStats,
+  TimeoutError,
+  waitUntil,
+} from 'prom-utils'
 import { describe, test } from 'vitest'
 
 import { getKeys, initSync } from './mongoChangeStream.js'
@@ -42,34 +48,6 @@ const getSync = async (options?: SyncOptions) => {
   return sync
 }
 
-/**
- * Repeatedly checks the provided predicate until it either returns true or the
- * timeout is reached.
- *
- * @param pred - The predicate to check: an async function returning a boolean.
- * @param timeout - The maximum time to wait for the predicate to return true.
- * @param interval - The time to wait between checks.
- *
- * @returns true if the predicate returned true before the timeout, false
- * otherwise.
- */
-const eventually = async (
-  pred: () => Promise<boolean>,
-  timeout: number,
-  interval: number
-) => {
-  const start = Date.now()
-
-  while (Date.now() - start < timeout) {
-    if (await pred()) {
-      return true
-    }
-    await setTimeout(interval)
-  }
-
-  return false
-}
-
 interface AssertEventuallyOptions {
   /** The maximum time to wait for the predicate to return true. */
   timeout?: number
@@ -93,10 +71,19 @@ const assertEventually = async (
   options: AssertEventuallyOptions = {}
 ) => {
   const { timeout, interval, message } = options
-  assert.ok(
-    await eventually(pred, timeout ?? ms('30s'), interval ?? ms('50ms')),
-    message
-  )
+
+  try {
+    await waitUntil(pred, {
+      timeout: timeout ?? ms('20s'),
+      checkFrequency: interval ?? ms('50ms'),
+    })
+  } catch (e) {
+    if (e instanceof TimeoutError) {
+      assert.fail(message)
+    } else {
+      throw e
+    }
+  }
 }
 
 describe.sequential('syncing', () => {
