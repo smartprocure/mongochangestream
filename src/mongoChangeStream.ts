@@ -432,8 +432,12 @@ export function initSync<ExtendedEvents extends EventEmitter.ValidEventTypes>(
         // Each item in `maybeRecords` is either an actual record, or null. Null
         // is a signal that we have reached the end of the change stream and we
         // just need to update the resume token in Redis.
-        const records = maybeRecords.filter((record) => record != null)
-
+        const records: ChangeStreamDocument[] = []
+        for (const record of maybeRecords) {
+          if (record) {
+            records.push(record)
+          }
+        }
         // Process batch of records with retries.
         // NOTE: processRecords could mutate records.
         try {
