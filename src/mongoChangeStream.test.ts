@@ -11,10 +11,16 @@ import {
 import ms from 'ms'
 import assert from 'node:assert'
 import { setTimeout } from 'node:timers/promises'
-import type { LastFlush, QueueOptions, QueueStats } from 'prom-utils'
+import {
+  type LastFlush,
+  type QueueOptions,
+  type QueueStats,
+  TimeoutError,
+  waitUntil,
+} from 'prom-utils'
 import { describe, test } from 'vitest'
 
-import { initSync } from './mongoChangeStream.js'
+import { getKeys, initSync } from './mongoChangeStream.js'
 import type {
   CursorErrorEvent,
   ScanOptions,
@@ -40,6 +46,31 @@ const getSync = async (options?: SyncOptions) => {
   const sync = initSync(redis, coll, options)
   sync.emitter.on('stateChange', console.log)
   return sync
+}
+
+/**
+ * Asserts that the provided predicate eventually returns true.
+ *
+ * @param pred - The predicate to check: an async function returning a boolean.
+ * @param failureMessage - The message to display if the predicate does not
+ * return true before the timeout.
+ *
+ * @throws AssertionError if the predicate does not return true before the
+ * timeout.
+ */
+const assertEventually = async (
+  pred: () => Promise<boolean>,
+  failureMessage = 'Failed to satisfy predicate'
+) => {
+  try {
+    await waitUntil(pred, { timeout: ms('20s'), checkFrequency: ms('50ms') })
+  } catch (e) {
+    if (e instanceof TimeoutError) {
+      assert.fail(failureMessage)
+    } else {
+      throw e
+    }
+  }
 }
 
 describe.sequential('syncing', () => {
@@ -113,7 +144,7 @@ describe.sequential('syncing', () => {
     const sync = await getSync()
     await initState(sync, db, coll)
 
-    const processed = []
+    const processed: unknown[] = []
     const processRecords = async (docs: ChangeStreamInsertDocument[]) => {
       await setTimeout(50)
       for (const doc of docs) {
@@ -213,7 +244,7 @@ describe.sequential('syncing', () => {
     await initState(sync, db, coll)
 
     let counter = 0
-    const processed = []
+    const processed: unknown[] = []
     const processRecords = async (docs: ChangeStreamInsertDocument[]) => {
       await setTimeout(50)
       // Simulate a failure on the first try
@@ -238,7 +269,7 @@ describe.sequential('syncing', () => {
     const sync = await getSync()
     await initState(sync, db, coll)
 
-    const processed = []
+    const processed: unknown[] = []
     const processRecords = async (docs: ChangeStreamInsertDocument[]) => {
       await setTimeout(50)
       processed.push(...docs)
@@ -270,7 +301,7 @@ describe.sequential('syncing', () => {
       lastFlush = event.lastFlush
     })
 
-    const processed = []
+    const processed: unknown[] = []
     const processRecords = async (docs: ChangeStreamInsertDocument[]) => {
       await setTimeout(50)
       processed.push(...docs)
@@ -298,7 +329,7 @@ describe.sequential('syncing', () => {
     // Clear syncing state
     await sync2.reset()
 
-    const processed: { v1: any[]; v2: any[] } = { v1: [], v2: [] }
+    const processed: { v1: unknown[]; v2: unknown[] } = { v1: [], v2: [] }
     const processRecords =
       (version: 'v1' | 'v2') => async (docs: ChangeStreamInsertDocument[]) => {
         await setTimeout(50)
@@ -343,7 +374,7 @@ describe.sequential('syncing', () => {
     const sync = await getSync()
     await initState(sync, db, coll)
 
-    const processed = []
+    const processed: unknown[] = []
     const processRecords = async (docs: ChangeStreamInsertDocument[]) => {
       await setTimeout(50)
       processed.push(...docs)
@@ -391,7 +422,7 @@ describe.sequential('syncing', () => {
     await sync.reset()
     await coll.deleteMany({})
 
-    const processed = []
+    const processed: unknown[] = []
     const processRecords = async (docs: ChangeStreamInsertDocument[]) => {
       await setTimeout(50)
       processed.push(...docs)
@@ -460,7 +491,7 @@ describe.sequential('syncing', () => {
     })
     await initState(sync, db, coll)
 
-    const processed = []
+    const processed: unknown[] = []
     const processRecords = async (docs: ChangeStreamInsertDocument[]) => {
       await setTimeout(10)
       processed.push(...docs)
@@ -524,7 +555,7 @@ describe.sequential('syncing', () => {
     sync.emitter.on('cursorError', () => {
       cursorError = true
     })
-    const processed: any[] = []
+    const processed: unknown[] = []
     const processRecords = async (docs: ChangeStreamDocument[]) => {
       for (const doc of docs) {
         await setTimeout(5)
@@ -562,7 +593,7 @@ describe.sequential('syncing', () => {
     await initState(sync, db, coll)
 
     let counter = 0
-    const processed: any[] = []
+    const processed: unknown[] = []
     const processRecords = async (docs: ChangeStreamDocument[]) => {
       // Simulate a failure on the first try
       if (counter++ === 0) {
@@ -670,7 +701,7 @@ describe.sequential('syncing', () => {
     sync.emitter.on('cursorError', () => {
       cursorError = true
     })
-    const processed: any[] = []
+    const processed: unknown[] = []
     const processRecords = async (docs: ChangeStreamDocument[]) => {
       for (const doc of docs) {
         await setTimeout(5)
@@ -709,7 +740,7 @@ describe.sequential('syncing', () => {
       lastFlush = event.lastFlush
     })
 
-    const processed: any[] = []
+    const processed: unknown[] = []
     const processRecords = async (docs: ChangeStreamDocument[]) => {
       for (const doc of docs) {
         await setTimeout(5)
@@ -748,7 +779,7 @@ describe.sequential('syncing', () => {
     const sync = await getSync()
     await initState(sync, db, coll)
 
-    const processed: any[] = []
+    const processed: unknown[] = []
     const processRecords = async (docs: ChangeStreamDocument[]) => {
       for (const doc of docs) {
         await setTimeout(5)
@@ -941,7 +972,7 @@ describe.sequential('syncing', () => {
     const sync = await getSync()
     await initState(sync, db, coll)
 
-    const processed = []
+    const processed: unknown[] = []
     // Change stream
     const processRecords = async (docs: ChangeStreamDocument[]) => {
       for (const doc of docs) {
@@ -1056,7 +1087,7 @@ describe.sequential('syncing', () => {
     await initState(sync, db, coll)
 
     let resyncTriggered = false
-    const processed = []
+    const processed: unknown[] = []
 
     const processRecords = async (docs: ChangeStreamInsertDocument[]) => {
       await setTimeout(50)
@@ -1207,5 +1238,59 @@ describe.sequential('syncing', () => {
     })
     sync.emitter.emit('foo', 'bar')
     assert.strictEqual(emitted, 'bar')
+  })
+
+  test('should update the resume token, even if there were no records updated', async () => {
+    const { coll, db, redis } = await getConns()
+    const sync = await getSync()
+    await initState(sync, db, coll)
+    const processRecords = async () => {
+      await setTimeout(5)
+    }
+
+    // Utilities for comparing resume tokens to see if they change over time.
+    const { changeStreamTokenKey } = getKeys(coll, {})
+    const getCurrentToken = async () => await redis.get(changeStreamTokenKey)
+    const assertResumeTokenUpdated = async (
+      lastToken: string | null,
+      when: string
+    ): Promise<string | null> => {
+      let currentToken: string | null = null
+
+      await assertEventually(async () => {
+        currentToken = await getCurrentToken()
+        return currentToken !== lastToken
+      }, `Resume token was not updated ${when}`)
+
+      return currentToken
+    }
+
+    // The resume token should initially be null, since we ran `initState`
+    // above.
+    const token = await getCurrentToken()
+    assert.equal(token, null)
+
+    const changeStream = await sync.processChangeStream(processRecords, {
+      timeout: ms('5s'),
+    })
+    changeStream.start()
+    // Let change stream connect
+    await setTimeout(ms('1s'))
+
+    // Waiting for a while should result in an updated resume token.
+    await assertResumeTokenUpdated(token, 'after waiting')
+
+    // Updating records results in an updated resume token.
+    await coll.updateMany({}, { $set: { createdAt: new Date('2022-01-03') } })
+    await assertResumeTokenUpdated(token, 'after updating records')
+
+    // Waiting for a while after an update should result in the resume token
+    // updating again.
+    await assertResumeTokenUpdated(
+      token,
+      'after waiting again after an update'
+    )
+
+    await changeStream.stop()
   })
 })

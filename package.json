@@ -1,6 +1,6 @@
 {
   "name": "mongochangestream",
-  "version": "0.58.0",
+  "version": "0.59.0",
   "description": "Sync MongoDB collections via change streams into any database.",
   "author": "GovSpend",
   "main": "dist/index.js",
@@ -13,7 +13,7 @@
   "scripts": {
     "prepare": "npm run lint && npm run test && npm run build",
     "clean": "rm -rf dist",
-    "build": "npm run fmt && npm run clean && tsc --declaration --project ./tsconfig-prod.json",
+    "build": "npm run fmt && npm run clean && tsc --declaration",
     "build:watch": "tsc --watch",
     "lint": "eslint src/**",
     "fmt": "prettier --ignore-path .gitignore --write './'",
