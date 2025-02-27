@@ -1267,7 +1267,7 @@ describe.sequential('syncing', () => {
 
     // The resume token should initially be null, since we ran `initState`
     // above.
-    let token = await getCurrentToken()
+    const token = await getCurrentToken()
     assert.equal(token, null)
 
     const changeStream = await sync.processChangeStream(processRecords, {
@@ -1278,15 +1278,15 @@ describe.sequential('syncing', () => {
     await setTimeout(ms('1s'))
 
     // Waiting for a while should result in an updated resume token.
-    token = await assertResumeTokenUpdated(token, 'after waiting')
+    await assertResumeTokenUpdated(token, 'after waiting')
 
     // Updating records results in an updated resume token.
     await coll.updateMany({}, { $set: { createdAt: new Date('2022-01-03') } })
-    token = await assertResumeTokenUpdated(token, 'after updating records')
+    await assertResumeTokenUpdated(token, 'after updating records')
 
     // Waiting for a while after an update should result in the resume token
     // updating again.
-    token = await assertResumeTokenUpdated(
+    await assertResumeTokenUpdated(
       token,
       'after waiting again after an update'
     )
