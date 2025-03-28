@@ -1,3 +1,7 @@
+# 0.60.0
+
+- Type narrowing for `processChangeStream` based on `options.operationTypes`.
+
 # 0.59.0
 
 - The resume token stored in Redis is now updated regularly, even if the

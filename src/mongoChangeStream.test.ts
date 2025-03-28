@@ -942,17 +942,20 @@ describe.sequential('syncing', () => {
     await initState(sync, db, coll)
 
     const operations: string[] = []
-    const processRecords = async (docs: ChangeStreamDocument[]) => {
-      for (const doc of docs) {
-        await setTimeout(5)
-        operations.push(doc.operationType)
+
+    const changeStream = await sync.processChangeStream(
+      async (docs) => {
+        for (const doc of docs) {
+          await setTimeout(5)
+          operations.push(doc.operationType)
+        }
+      },
+      {
+        operationTypes: ['insert'],
+        // Short timeout since only event will be queued
+        timeout: 500,
       }
-    }
-    const changeStream = await sync.processChangeStream(processRecords, {
-      operationTypes: ['insert'],
-      // Short timeout since only event will be queued
-      timeout: 500,
-    })
+    )
     // Start
     changeStream.start()
     await setTimeout(ms('1s'))
@@ -1286,10 +1289,7 @@ describe.sequential('syncing', () => {
 
     // Waiting for a while after an update should result in the resume token
     // updating again.
-    await assertResumeTokenUpdated(
-      token,
-      'after waiting again after an update'
-    )
+    await assertResumeTokenUpdated(token, 'after waiting again after an update')
 
     await changeStream.stop()
   })

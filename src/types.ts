@@ -1,8 +1,22 @@
 import type {
   AggregationCursor,
   ChangeStream,
+  ChangeStreamCollModDocument,
+  ChangeStreamCreateDocument,
+  ChangeStreamCreateIndexDocument,
+  ChangeStreamDeleteDocument,
   ChangeStreamDocument,
+  ChangeStreamDropDatabaseDocument,
+  ChangeStreamDropDocument,
+  ChangeStreamDropIndexDocument,
   ChangeStreamInsertDocument,
+  ChangeStreamInvalidateDocument,
+  ChangeStreamRefineCollectionShardKeyDocument,
+  ChangeStreamRenameDocument,
+  ChangeStreamReplaceDocument,
+  ChangeStreamReshardCollectionDocument,
+  ChangeStreamShardCollectionDocument,
+  ChangeStreamUpdateDocument,
   Document,
   MongoAPIError,
   MongoServerError,
@@ -15,9 +29,35 @@ export type JSONSchema = Record<string, any>
 
 type MaybePromise<T> = T | Promise<T>
 
-export type ProcessChangeStreamRecords = (
-  docs: ChangeStreamDocument[]
-) => MaybePromise<void>
+// Create a mapped type for operation types
+type OperationTypeMap = {
+  insert: ChangeStreamInsertDocument
+  update: ChangeStreamUpdateDocument
+  replace: ChangeStreamReplaceDocument
+  delete: ChangeStreamDeleteDocument
+  drop: ChangeStreamDropDocument
+  rename: ChangeStreamRenameDocument
+  dropDatabase: ChangeStreamDropDatabaseDocument
+  invalidate: ChangeStreamInvalidateDocument
+  createIndex: ChangeStreamCreateIndexDocument
+  create: ChangeStreamCreateDocument
+  collMod: ChangeStreamCollModDocument
+  dropIndex: ChangeStreamDropIndexDocument
+  shardCollection: ChangeStreamShardCollectionDocument
+  reshardCollection: ChangeStreamReshardCollectionDocument
+  refineCollectionShardKey: ChangeStreamRefineCollectionShardKeyDocument
+}
+
+// Create a type for the valid operation types
+export type OperationType = keyof OperationTypeMap
+
+// Type to extract the specific document types from an array of operation types
+export type DocumentsForOperationTypes<T extends OperationType[] | undefined> =
+  T extends OperationType[] ? OperationTypeMap[T[number]] : ChangeStreamDocument
+
+export type ProcessChangeStreamRecords<
+  T extends OperationType[] | undefined = undefined,
+> = (docs: DocumentsForOperationTypes<T>[]) => MaybePromise<void>
 
 export type ProcessInitialScanRecords = (
   docs: ChangeStreamInsertDocument[]
@@ -64,9 +104,11 @@ export interface ScanOptions<T = any> {
   pipeline?: Document[]
 }
 
-export interface ChangeStreamOptions {
+export interface ChangeStreamOptions<
+  T extends OperationType[] | undefined = undefined,
+> {
   pipeline?: Document[]
-  operationTypes?: ChangeStreamDocument['operationType'][]
+  operationTypes?: T
 }
 
 export interface ChangeOptions {
