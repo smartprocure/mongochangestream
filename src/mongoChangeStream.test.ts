@@ -556,15 +556,17 @@ describe.sequential('syncing', () => {
       cursorError = true
     })
     const processed: unknown[] = []
-    const processRecords = async (docs: ChangeStreamDocument[]) => {
-      for (const doc of docs) {
-        await setTimeout(5)
-        // Simulate downstream mutation
-        delete doc._id
-        processed.push(doc)
+    const changeStream = await sync.processChangeStream(
+      // Type for docs is ChangeStreamDocument[]
+      async (docs) => {
+        for (const doc of docs) {
+          await setTimeout(5)
+          // Simulate downstream mutation
+          delete doc._id
+          processed.push(doc)
+        }
       }
-    }
-    const changeStream = await sync.processChangeStream(processRecords)
+    )
     // Start
     changeStream.start()
     await setTimeout(ms('1s'))
