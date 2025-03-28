@@ -16,7 +16,9 @@ export type JSONSchema = Record<string, any>
 type MaybePromise<T> = T | Promise<T>
 
 /** Utility type to extract the operationType from a document type */
-type ExtractOperationType<T> = T extends { operationType: infer O } ? O : never
+type ExtractOperationType<T> = T extends { operationType: infer Type }
+  ? Type
+  : never
 
 /** Mapping from operation type to document type */
 type OperationTypeMap = {
