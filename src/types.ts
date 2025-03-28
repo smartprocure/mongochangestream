@@ -15,12 +15,18 @@ export type JSONSchema = Record<string, any>
 
 type MaybePromise<T> = T | Promise<T>
 
-/** Utility type to extract the operationType from a document type */
+/**
+ * Extract the operationType field from a type.
+ * Create a union of all possible operation types.
+ */
 type ExtractOperationType<T> = T extends { operationType: infer Type }
   ? Type
   : never
 
-/** Mapping from operation type to document type */
+/**
+ * Mapping from operation type to document type. For example, if the operation
+ * type is 'insert', the document type is ChangeStreamInsertDocument.
+ */
 type OperationTypeMap = {
   [K in ExtractOperationType<ChangeStreamDocument>]: Extract<
     ChangeStreamDocument,
@@ -28,9 +34,16 @@ type OperationTypeMap = {
   >
 }
 
+/**
+ * Union of all possible operation types. For example, 'insert' | 'update' | 'delete'.
+ */
 export type OperationType = keyof OperationTypeMap
 
-/** Extract the specific document types from an array of operation types */
+/**
+ * Extract the specific document types from an array of operation types.
+ * For example, if the type parameter is ['insert', 'update'], the return type
+ * is ChangeStreamInsertDocument | ChangeStreamUpdateDocument.
+ */
 export type DocumentsForOperationTypes<T extends OperationType[] | undefined> =
   T extends OperationType[] ? OperationTypeMap[T[number]] : ChangeStreamDocument
 
