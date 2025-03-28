@@ -113,8 +113,6 @@ export interface ChangeStreamOptions<
 export interface ChangeOptions {
   /** How often to retrieve the schema and look for a change. */
   interval?: number
-  /** @deprecated Use shouldRemoveUnusedFields instead.*/
-  shouldRemoveMetadata?: boolean
   /**
    * Remove fields that are not used when converting the schema
    * in a downstream library like mongo2elastic or mongo2crate.
