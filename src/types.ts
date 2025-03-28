@@ -29,7 +29,7 @@ export type JSONSchema = Record<string, any>
 
 type MaybePromise<T> = T | Promise<T>
 
-// Create a mapped type for operation types
+/** Mapped type for operation types */
 type OperationTypeMap = {
   insert: ChangeStreamInsertDocument
   update: ChangeStreamUpdateDocument
@@ -48,10 +48,9 @@ type OperationTypeMap = {
   refineCollectionShardKey: ChangeStreamRefineCollectionShardKeyDocument
 }
 
-// Create a type for the valid operation types
 export type OperationType = keyof OperationTypeMap
 
-// Type to extract the specific document types from an array of operation types
+/** Extract the specific document types from an array of operation types */
 export type DocumentsForOperationTypes<T extends OperationType[] | undefined> =
   T extends OperationType[] ? OperationTypeMap[T[number]] : ChangeStreamDocument
 
