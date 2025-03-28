@@ -1,22 +1,8 @@
 import type {
   AggregationCursor,
   ChangeStream,
-  ChangeStreamCollModDocument,
-  ChangeStreamCreateDocument,
-  ChangeStreamCreateIndexDocument,
-  ChangeStreamDeleteDocument,
   ChangeStreamDocument,
-  ChangeStreamDropDatabaseDocument,
-  ChangeStreamDropDocument,
-  ChangeStreamDropIndexDocument,
   ChangeStreamInsertDocument,
-  ChangeStreamInvalidateDocument,
-  ChangeStreamRefineCollectionShardKeyDocument,
-  ChangeStreamRenameDocument,
-  ChangeStreamReplaceDocument,
-  ChangeStreamReshardCollectionDocument,
-  ChangeStreamShardCollectionDocument,
-  ChangeStreamUpdateDocument,
   Document,
   MongoAPIError,
   MongoServerError,
@@ -29,23 +15,15 @@ export type JSONSchema = Record<string, any>
 
 type MaybePromise<T> = T | Promise<T>
 
-/** Mapped type for operation types */
+/** Utility type to extract the operationType from a document type */
+type ExtractOperationType<T> = T extends { operationType: infer O } ? O : never
+
+/** Mapping from operation type to document type */
 type OperationTypeMap = {
-  create: ChangeStreamCreateDocument
-  createIndexes: ChangeStreamCreateIndexDocument
-  delete: ChangeStreamDeleteDocument
-  drop: ChangeStreamDropDocument
-  dropDatabase: ChangeStreamDropDatabaseDocument
-  dropIndexes: ChangeStreamDropIndexDocument
-  insert: ChangeStreamInsertDocument
-  invalidate: ChangeStreamInvalidateDocument
-  modify: ChangeStreamCollModDocument
-  refineCollectionShardKey: ChangeStreamRefineCollectionShardKeyDocument
-  rename: ChangeStreamRenameDocument
-  replace: ChangeStreamReplaceDocument
-  reshardCollection: ChangeStreamReshardCollectionDocument
-  shardCollection: ChangeStreamShardCollectionDocument
-  update: ChangeStreamUpdateDocument
+  [K in ExtractOperationType<ChangeStreamDocument>]: Extract<
+    ChangeStreamDocument,
+    { operationType: K }
+  >
 }
 
 export type OperationType = keyof OperationTypeMap
