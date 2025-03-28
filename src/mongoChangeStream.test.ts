@@ -944,6 +944,7 @@ describe.sequential('syncing', () => {
     const operations: string[] = []
 
     const changeStream = await sync.processChangeStream(
+      // Type for docs is ChangeStreamInsertDocument[]
       async (docs) => {
         for (const doc of docs) {
           await setTimeout(5)
