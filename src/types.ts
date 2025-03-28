@@ -31,21 +31,21 @@ type MaybePromise<T> = T | Promise<T>
 
 /** Mapped type for operation types */
 type OperationTypeMap = {
-  insert: ChangeStreamInsertDocument
-  update: ChangeStreamUpdateDocument
-  replace: ChangeStreamReplaceDocument
+  create: ChangeStreamCreateDocument
+  createIndexes: ChangeStreamCreateIndexDocument
   delete: ChangeStreamDeleteDocument
   drop: ChangeStreamDropDocument
-  rename: ChangeStreamRenameDocument
   dropDatabase: ChangeStreamDropDatabaseDocument
+  dropIndexes: ChangeStreamDropIndexDocument
+  insert: ChangeStreamInsertDocument
   invalidate: ChangeStreamInvalidateDocument
-  createIndex: ChangeStreamCreateIndexDocument
-  create: ChangeStreamCreateDocument
-  collMod: ChangeStreamCollModDocument
-  dropIndex: ChangeStreamDropIndexDocument
-  shardCollection: ChangeStreamShardCollectionDocument
-  reshardCollection: ChangeStreamReshardCollectionDocument
+  modify: ChangeStreamCollModDocument
   refineCollectionShardKey: ChangeStreamRefineCollectionShardKeyDocument
+  rename: ChangeStreamRenameDocument
+  replace: ChangeStreamReplaceDocument
+  reshardCollection: ChangeStreamReshardCollectionDocument
+  shardCollection: ChangeStreamShardCollectionDocument
+  update: ChangeStreamUpdateDocument
 }
 
 export type OperationType = keyof OperationTypeMap
