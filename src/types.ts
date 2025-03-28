@@ -35,7 +35,7 @@ type OperationTypeMap = {
 }
 
 /**
- * Union of all possible operation types. For example, 'insert' | 'update' | 'delete'.
+ * Union of all possible operation types - 'insert' | 'update' | 'delete' etc.
  */
 export type OperationType = keyof OperationTypeMap
 
