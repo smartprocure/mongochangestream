@@ -15,9 +15,41 @@ export type JSONSchema = Record<string, any>
 
 type MaybePromise<T> = T | Promise<T>
 
-export type ProcessChangeStreamRecords = (
-  docs: ChangeStreamDocument[]
-) => MaybePromise<void>
+/**
+ * Extract the operationType field from a type.
+ * Create a union of all possible operation types.
+ */
+type ExtractOperationType<T> = T extends { operationType: infer Type }
+  ? Type
+  : never
+
+/**
+ * Mapping from operation type to document type. For example, if the operation
+ * type is 'insert', the document type is ChangeStreamInsertDocument.
+ */
+type OperationTypeMap = {
+  [K in ExtractOperationType<ChangeStreamDocument>]: Extract<
+    ChangeStreamDocument,
+    { operationType: K }
+  >
+}
+
+/**
+ * Union of all possible operation types - 'insert' | 'update' | 'delete' etc.
+ */
+export type OperationType = keyof OperationTypeMap
+
+/**
+ * Extract the specific document types from an array of operation types.
+ * For example, if the type parameter is ['insert', 'update'], the return type
+ * is ChangeStreamInsertDocument | ChangeStreamUpdateDocument.
+ */
+export type DocumentsForOperationTypes<T extends OperationType[] | undefined> =
+  T extends OperationType[] ? OperationTypeMap[T[number]] : ChangeStreamDocument
+
+export type ProcessChangeStreamRecords<
+  T extends OperationType[] | undefined = undefined,
+> = (docs: DocumentsForOperationTypes<T>[]) => MaybePromise<void>
 
 export type ProcessInitialScanRecords = (
   docs: ChangeStreamInsertDocument[]
@@ -64,16 +96,16 @@ export interface ScanOptions<T = any> {
   pipeline?: Document[]
 }
 
-export interface ChangeStreamOptions {
+export interface ChangeStreamOptions<
+  T extends OperationType[] | undefined = undefined,
+> {
   pipeline?: Document[]
-  operationTypes?: ChangeStreamDocument['operationType'][]
+  operationTypes?: T
 }
 
 export interface ChangeOptions {
   /** How often to retrieve the schema and look for a change. */
   interval?: number
-  /** @deprecated Use shouldRemoveUnusedFields instead.*/
-  shouldRemoveMetadata?: boolean
   /**
    * Remove fields that are not used when converting the schema
    * in a downstream library like mongo2elastic or mongo2crate.

@@ -28,8 +28,10 @@ import type {
   ChangeOptions,
   ChangeStreamOptions,
   CursorErrorEvent,
+  DocumentsForOperationTypes,
   Events,
   JSONSchema,
+  OperationType,
   ProcessChangeStreamRecords,
   ProcessInitialScanRecords,
   ScanOptions,
@@ -369,9 +371,11 @@ export function initSync<ExtendedEvents extends EventEmitter.ValidEventTypes>(
    * Call `start` to start processing events and `stop` to close
    * the change stream.
    */
-  const processChangeStream = async (
-    processRecords: ProcessChangeStreamRecords,
-    options: QueueOptions & ChangeStreamOptions = {}
+  const processChangeStream = async <
+    T extends OperationType[] | undefined = undefined,
+  >(
+    processRecords: ProcessChangeStreamRecords<T>,
+    options: QueueOptions & ChangeStreamOptions<T> = {}
   ) => {
     let deferred: Deferred
     const retryController = new AbortController()
@@ -427,12 +431,12 @@ export function initSync<ExtendedEvents extends EventEmitter.ValidEventTypes>(
       debug('Started change stream')
 
       const _processRecords = async (
-        maybeRecords: (ChangeStreamDocument | null)[]
+        maybeRecords: (DocumentsForOperationTypes<T> | null)[]
       ) => {
         // Each item in `maybeRecords` is either an actual record, or null. Null
         // is a signal that we have reached the end of the change stream and we
         // just need to update the resume token in Redis.
-        const records: ChangeStreamDocument[] = []
+        const records: DocumentsForOperationTypes<T>[] = []
         for (const record of maybeRecords) {
           if (record) {
             records.push(record)
@@ -493,7 +497,8 @@ export function initSync<ExtendedEvents extends EventEmitter.ValidEventTypes>(
         // is kept. Even if the oplog entry still exists, it can take a very
         // long time to scan through all of the oplog entries since then, so
         // keeping a recent resume token is vital for performance.
-        const event: ChangeStreamDocument | null = await nextChecker.getNext()
+        const event: DocumentsForOperationTypes<T> | null =
+          await nextChecker.getNext()
 
         if (event) {
           debug('Change stream event %O', event)
