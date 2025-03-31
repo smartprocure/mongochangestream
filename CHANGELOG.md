@@ -1,3 +1,7 @@
+# 0.61.0
+
+- Bump dependencies to fix security vulnerabilities.
+
 # 0.60.0
 
 - Type narrowing for `processChangeStream` based on `options.operationTypes`.
