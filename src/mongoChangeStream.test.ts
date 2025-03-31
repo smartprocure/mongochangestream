@@ -1,6 +1,12 @@
 import { Redis } from 'ioredis'
 import _ from 'lodash/fp.js'
-import { genUser, initState, numDocs, schema } from 'mongochangestream-testing'
+import {
+  assertEventually,
+  genUser,
+  initState,
+  numDocs,
+  schema,
+} from 'mongochangestream-testing'
 import {
   type ChangeStreamDocument,
   type ChangeStreamInsertDocument,
@@ -11,13 +17,7 @@ import {
 import ms from 'ms'
 import assert from 'node:assert'
 import { setTimeout } from 'node:timers/promises'
-import {
-  type LastFlush,
-  type QueueOptions,
-  type QueueStats,
-  TimeoutError,
-  waitUntil,
-} from 'prom-utils'
+import { type LastFlush, type QueueOptions, type QueueStats } from 'prom-utils'
 import { describe, test } from 'vitest'
 
 import { getKeys, initSync } from './mongoChangeStream.js'
@@ -46,31 +46,6 @@ const getSync = async (options?: SyncOptions) => {
   const sync = initSync(redis, coll, options)
   sync.emitter.on('stateChange', console.log)
   return sync
-}
-
-/**
- * Asserts that the provided predicate eventually returns true.
- *
- * @param pred - The predicate to check: an async function returning a boolean.
- * @param failureMessage - The message to display if the predicate does not
- * return true before the timeout.
- *
- * @throws AssertionError if the predicate does not return true before the
- * timeout.
- */
-const assertEventually = async (
-  pred: () => Promise<boolean>,
-  failureMessage = 'Failed to satisfy predicate'
-) => {
-  try {
-    await waitUntil(pred, { timeout: ms('20s'), checkFrequency: ms('50ms') })
-  } catch (e) {
-    if (e instanceof TimeoutError) {
-      assert.fail(failureMessage)
-    } else {
-      throw e
-    }
-  }
 }
 
 describe.sequential('syncing', () => {
