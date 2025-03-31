@@ -4,7 +4,6 @@ import type { Redis } from 'ioredis'
 import _ from 'lodash/fp.js'
 import {
   type ChangeStream,
-  type ChangeStreamDocument,
   type ChangeStreamInsertDocument,
   type Collection,
   type Db,
