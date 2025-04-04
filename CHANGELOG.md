@@ -1,3 +1,7 @@
+# 0.61.1
+
+- Bug fix: Unpause when calling `stop` for `processChangeStream` or `runInitialScan` to prevent hanging.
+
 # 0.61.0
 
 - Bump dependencies to fix security vulnerabilities.

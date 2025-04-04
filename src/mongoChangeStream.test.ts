@@ -49,6 +49,7 @@ const getSync = async (options?: SyncOptions) => {
 }
 
 describe.sequential('syncing', () => {
+  // ------- Idempotence -------
   // NOTE: This test is flaky. Having it run first seems to help :)
   test('stopping change stream is idempotent', async () => {
     const { coll, db } = await getConns()
@@ -114,6 +115,7 @@ describe.sequential('syncing', () => {
     await initialScan.stop()
   })
 
+  //------- Initial scan -------
   test('should complete initial scan', async () => {
     const { coll, db, redis } = await getConns()
     const sync = await getSync()
@@ -262,6 +264,25 @@ describe.sequential('syncing', () => {
     assert.strictEqual(processed.length, numDocs)
     // Stop
     await initialScan.stop()
+  })
+
+  test('stopping paused initial scan works', async () => {
+    const { coll, db } = await getConns()
+    const sync = await getSync()
+    await initState(sync, db, coll)
+
+    const processRecords = async () => {
+      await setTimeout(50)
+    }
+    const initialScan = await sync.runInitialScan(processRecords)
+    initialScan.start()
+    await setTimeout(200)
+    // Pause
+    sync.pausable.pause()
+    // Stop
+    await initialScan.stop()
+    // Check that we are not paused
+    assert.strictEqual(sync.pausable.isPaused, false)
   })
 
   test('initial scan should throttle', async () => {
@@ -521,6 +542,7 @@ describe.sequential('syncing', () => {
     assert.ok(documents[0].cityState)
   })
 
+  //------- Change stream -------
   test('should process records via change stream', async () => {
     const { coll, db, redis } = await getConns()
     const sync = await getSync()
@@ -703,6 +725,25 @@ describe.sequential('syncing', () => {
     await changeStream.stop()
     // Should not emit cursorError when stopping
     assert.strictEqual(cursorError, false)
+  })
+
+  test('stopping paused change stream works', async () => {
+    const { coll, db } = await getConns()
+    const sync = await getSync()
+    await initState(sync, db, coll)
+
+    // Change stream
+    const processRecords = async () => {
+      await setTimeout(5)
+    }
+    const changeStream = await sync.processChangeStream(processRecords)
+    changeStream.start()
+    // Pause
+    sync.pausable.pause()
+    // Stop
+    await changeStream.stop()
+    // Check that we are not paused
+    assert.strictEqual(sync.pausable.isPaused, false)
   })
 
   test('change stream should throttle', async () => {

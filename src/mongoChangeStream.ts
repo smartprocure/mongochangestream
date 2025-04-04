@@ -346,6 +346,9 @@ export function initSync<ExtendedEvents extends EventEmitter.ValidEventTypes>(
       // Abort retries
       retryController.abort('stopping')
       debug('Retry controller aborted')
+      // Unpause
+      pause.resume()
+      debug('Unpaused')
       // Wait for start fn to finish
       await deferred?.promise
       state.change('stopped')
@@ -552,6 +555,9 @@ export function initSync<ExtendedEvents extends EventEmitter.ValidEventTypes>(
       // Abort retries
       retryController.abort('stopping')
       debug('Retry controller aborted')
+      // Unpause
+      pause.resume()
+      debug('Unpaused')
       // Wait for start fn to finish
       await deferred?.promise
       state.change('stopped')
