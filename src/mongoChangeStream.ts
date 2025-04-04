@@ -687,7 +687,11 @@ export function initSync<ExtendedEvents extends EventEmitter.ValidEventTypes>(
     detectResync,
     keys,
     emitter,
-    /** Pause and resume all syncing functions at once. */
+    /**
+     * Pause and resume all syncing functions at once. A call to `stop`
+     * for `runInitialScan` or `processChangeStream` will resume to prevent
+     * hanging.
+     */
     pausable: pause,
   }
 }
