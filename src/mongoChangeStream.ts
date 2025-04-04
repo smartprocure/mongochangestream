@@ -346,6 +346,9 @@ export function initSync<ExtendedEvents extends EventEmitter.ValidEventTypes>(
       // Abort retries
       retryController.abort('stopping')
       debug('Retry controller aborted')
+      // Unpause
+      pause.resume()
+      debug('Unpaused')
       // Wait for start fn to finish
       await deferred?.promise
       state.change('stopped')
@@ -552,6 +555,9 @@ export function initSync<ExtendedEvents extends EventEmitter.ValidEventTypes>(
       // Abort retries
       retryController.abort('stopping')
       debug('Retry controller aborted')
+      // Unpause
+      pause.resume()
+      debug('Unpaused')
       // Wait for start fn to finish
       await deferred?.promise
       state.change('stopped')
@@ -681,7 +687,11 @@ export function initSync<ExtendedEvents extends EventEmitter.ValidEventTypes>(
     detectResync,
     keys,
     emitter,
-    /** Pause and resume all syncing functions at once. */
+    /**
+     * Pause and resume all syncing functions at once. A call to `stop`
+     * for `runInitialScan` or `processChangeStream` will resume to prevent
+     * hanging.
+     */
     pausable: pause,
   }
 }

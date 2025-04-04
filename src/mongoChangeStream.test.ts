@@ -49,6 +49,7 @@ const getSync = async (options?: SyncOptions) => {
 }
 
 describe.sequential('syncing', () => {
+  // ------- Idempotence -------
   // NOTE: This test is flaky. Having it run first seems to help :)
   test('stopping change stream is idempotent', async () => {
     const { coll, db } = await getConns()
@@ -114,6 +115,7 @@ describe.sequential('syncing', () => {
     await initialScan.stop()
   })
 
+  //------- Initial Scan -------
   test('should complete initial scan', async () => {
     const { coll, db, redis } = await getConns()
     const sync = await getSync()
@@ -262,6 +264,25 @@ describe.sequential('syncing', () => {
     assert.strictEqual(processed.length, numDocs)
     // Stop
     await initialScan.stop()
+  })
+
+  test('stopping paused initial scan works', async () => {
+    const { coll, db } = await getConns()
+    const sync = await getSync()
+    await initState(sync, db, coll)
+
+    const processRecords = async () => {
+      await setTimeout(50)
+    }
+    const initialScan = await sync.runInitialScan(processRecords)
+    initialScan.start()
+    await setTimeout(200)
+    // Pause
+    sync.pausable.pause()
+    // Stop
+    await initialScan.stop()
+    // Check that we are not paused
+    assert.strictEqual(sync.pausable.isPaused, false)
   })
 
   test('initial scan should throttle', async () => {
@@ -521,6 +542,7 @@ describe.sequential('syncing', () => {
     assert.ok(documents[0].cityState)
   })
 
+  //------- Change Stream -------
   test('should process records via change stream', async () => {
     const { coll, db, redis } = await getConns()
     const sync = await getSync()
@@ -703,6 +725,25 @@ describe.sequential('syncing', () => {
     await changeStream.stop()
     // Should not emit cursorError when stopping
     assert.strictEqual(cursorError, false)
+  })
+
+  test('stopping paused change stream works', async () => {
+    const { coll, db } = await getConns()
+    const sync = await getSync()
+    await initState(sync, db, coll)
+
+    // Change stream
+    const processRecords = async () => {
+      await setTimeout(5)
+    }
+    const changeStream = await sync.processChangeStream(processRecords)
+    changeStream.start()
+    // Pause
+    sync.pausable.pause()
+    // Stop
+    await changeStream.stop()
+    // Check that we are not paused
+    assert.strictEqual(sync.pausable.isPaused, false)
   })
 
   test('change stream should throttle', async () => {
@@ -1062,6 +1103,58 @@ describe.sequential('syncing', () => {
     await changeStream.stop()
   })
 
+  test('should update the resume token, even if there were no records updated', async () => {
+    const { coll, db, redis } = await getConns()
+    const sync = await getSync()
+    await initState(sync, db, coll)
+    const processRecords = async () => {
+      await setTimeout(5)
+    }
+
+    // Utilities for comparing resume tokens to see if they change over time.
+    const { changeStreamTokenKey } = getKeys(coll, {})
+    const getCurrentToken = async () => await redis.get(changeStreamTokenKey)
+    const assertResumeTokenUpdated = async (
+      lastToken: string | null,
+      when: string
+    ): Promise<string | null> => {
+      let currentToken: string | null = null
+
+      await assertEventually(async () => {
+        currentToken = await getCurrentToken()
+        return currentToken !== lastToken
+      }, `Resume token was not updated ${when}`)
+
+      return currentToken
+    }
+
+    // The resume token should initially be null, since we ran `initState`
+    // above.
+    const token = await getCurrentToken()
+    assert.equal(token, null)
+
+    const changeStream = await sync.processChangeStream(processRecords, {
+      timeout: ms('5s'),
+    })
+    changeStream.start()
+    // Let change stream connect
+    await setTimeout(ms('1s'))
+
+    // Waiting for a while should result in an updated resume token.
+    await assertResumeTokenUpdated(token, 'after waiting')
+
+    // Updating records results in an updated resume token.
+    await coll.updateMany({}, { $set: { createdAt: new Date('2022-01-03') } })
+    await assertResumeTokenUpdated(token, 'after updating records')
+
+    // Waiting for a while after an update should result in the resume token
+    // updating again.
+    await assertResumeTokenUpdated(token, 'after waiting again after an update')
+
+    await changeStream.stop()
+  })
+
+  // ------ Detect Resync -------
   test('Should resync when resync flag is set', async () => {
     const { coll, db, redis } = await getConns()
     const sync = await getSync()
@@ -1136,6 +1229,7 @@ describe.sequential('syncing', () => {
     resync.stop()
   })
 
+  //------ Detect Schema Change -------
   test('Detect schema change', async () => {
     const { db, coll } = await getConns()
     const sync = await getSync()
@@ -1210,6 +1304,7 @@ describe.sequential('syncing', () => {
     schemaChange.stop()
   })
 
+  //------ Events -------
   test('can extend events', async () => {
     const { coll, redis } = await getConns({})
     const sync = initSync<'foo' | 'bar'>(redis, coll)
@@ -1219,56 +1314,5 @@ describe.sequential('syncing', () => {
     })
     sync.emitter.emit('foo', 'bar')
     assert.strictEqual(emitted, 'bar')
-  })
-
-  test('should update the resume token, even if there were no records updated', async () => {
-    const { coll, db, redis } = await getConns()
-    const sync = await getSync()
-    await initState(sync, db, coll)
-    const processRecords = async () => {
-      await setTimeout(5)
-    }
-
-    // Utilities for comparing resume tokens to see if they change over time.
-    const { changeStreamTokenKey } = getKeys(coll, {})
-    const getCurrentToken = async () => await redis.get(changeStreamTokenKey)
-    const assertResumeTokenUpdated = async (
-      lastToken: string | null,
-      when: string
-    ): Promise<string | null> => {
-      let currentToken: string | null = null
-
-      await assertEventually(async () => {
-        currentToken = await getCurrentToken()
-        return currentToken !== lastToken
-      }, `Resume token was not updated ${when}`)
-
-      return currentToken
-    }
-
-    // The resume token should initially be null, since we ran `initState`
-    // above.
-    const token = await getCurrentToken()
-    assert.equal(token, null)
-
-    const changeStream = await sync.processChangeStream(processRecords, {
-      timeout: ms('5s'),
-    })
-    changeStream.start()
-    // Let change stream connect
-    await setTimeout(ms('1s'))
-
-    // Waiting for a while should result in an updated resume token.
-    await assertResumeTokenUpdated(token, 'after waiting')
-
-    // Updating records results in an updated resume token.
-    await coll.updateMany({}, { $set: { createdAt: new Date('2022-01-03') } })
-    await assertResumeTokenUpdated(token, 'after updating records')
-
-    // Waiting for a while after an update should result in the resume token
-    // updating again.
-    await assertResumeTokenUpdated(token, 'after waiting again after an update')
-
-    await changeStream.stop()
   })
 })
