@@ -3,11 +3,11 @@ import assert from 'node:assert'
 import { describe, test } from 'vitest'
 
 import {
+  castError,
   docToChangeStreamInsert,
   generatePipelineFromOmit,
   omitFieldsForUpdate,
   removeUnusedFields,
-  castError,
 } from './util.js'
 
 type ErrorWithCause = Error & { cause: unknown }
