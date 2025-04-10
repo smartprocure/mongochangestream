@@ -245,7 +245,11 @@ describe('safeRetry', () => {
       throw { foo: 'bar' }
     }
     const safeFn = safeRetry(fn)
-    await assert.rejects(safeFn, { name: 'Error', message: 'Unknown error' })
+    await assert.rejects(safeFn, {
+      name: 'Error',
+      message: 'Unknown error',
+      cause: { foo: 'bar' },
+    })
   })
 
   test('should pass through successful results', async () => {
