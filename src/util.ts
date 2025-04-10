@@ -206,7 +206,7 @@ const castError = (err: unknown): Error => {
   if (typeof err === 'string') {
     return new Error(err)
   }
-  return new Error('Unknown error')
+  return new Error('Unknown error', { cause: err })
 }
 
 /**
