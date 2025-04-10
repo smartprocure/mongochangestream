@@ -198,3 +198,26 @@ export const renameKeys = (doc: Document, keys: Record<string, string>) => {
     }
   }
 }
+
+const castError = (err: unknown): Error => {
+  if (err instanceof Error) {
+    return err
+  }
+  if (typeof err === 'string') {
+    return new Error(err)
+  }
+  return new Error('Unknown error')
+}
+
+/**
+ * Safely call function, wrapping non-Error exceptions in an Error.
+ */
+export const safeRetry = <T>(fn: () => PromiseLike<T> | T) => {
+  return async () => {
+    try {
+      return await fn()
+    } catch (err) {
+      throw castError(err)
+    }
+  }
+}
