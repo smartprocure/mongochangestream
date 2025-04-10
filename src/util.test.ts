@@ -7,8 +7,10 @@ import {
   generatePipelineFromOmit,
   omitFieldsForUpdate,
   removeUnusedFields,
-  safeRetry,
+  castError,
 } from './util.js'
+
+type ErrorWithCause = Error & { cause: unknown }
 
 describe('util', () => {
   describe('generatePipelineFromOmit', () => {
@@ -219,43 +221,24 @@ describe('util', () => {
   })
 })
 
-describe('safeRetry', () => {
-  test('should wrap string errors in Error object', async () => {
-    const fn = () => {
-      throw 'string error'
-    }
-    const safeFn = safeRetry(fn)
-    await assert.rejects(safeFn, { name: 'Error', message: 'string error' })
-  })
-
-  test('should pass through Error objects unchanged', async () => {
+describe('castError', () => {
+  test('should return the same Error if input is already an Error', () => {
     const originalError = new Error('test error')
-    const fn = () => {
-      throw originalError
-    }
-    const safeFn = safeRetry(fn)
-    await assert.rejects(safeFn, (err: Error) => {
-      assert.strictEqual(err, originalError)
-      return true
-    })
+    const result = castError(originalError)
+    assert.strictEqual(result, originalError)
   })
 
-  test('should wrap unknown errors in Error object', async () => {
-    const fn = () => {
-      throw { foo: 'bar' }
-    }
-    const safeFn = safeRetry(fn)
-    await assert.rejects(safeFn, {
-      name: 'Error',
-      message: 'Unknown error',
-      cause: { foo: 'bar' },
-    })
+  test('should convert string to Error', () => {
+    const result = castError('test error')
+    assert.ok(result instanceof Error)
+    assert.strictEqual(result.message, 'test error')
   })
 
-  test('should pass through successful results', async () => {
-    const fn = () => 'success'
-    const safeFn = safeRetry(fn)
-    const result = await safeFn()
-    assert.strictEqual(result, 'success')
+  test('should handle unknown error types', () => {
+    const unknownError = { foo: 'bar' }
+    const result = castError(unknownError) as ErrorWithCause
+    assert.ok(result instanceof Error)
+    assert.strictEqual(result.message, 'Unknown error')
+    assert.strictEqual(result.cause, unknownError)
   })
 })
