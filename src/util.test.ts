@@ -225,11 +225,7 @@ describe('safeRetry', () => {
       throw 'string error'
     }
     const safeFn = safeRetry(fn)
-    await assert.rejects(safeFn, (err: Error) => {
-      assert.ok(err instanceof Error)
-      assert.strictEqual(err.message, 'string error')
-      return true
-    })
+    await assert.rejects(safeFn, { name: 'Error', message: 'string error' })
   })
 
   test('should pass through Error objects unchanged', async () => {
@@ -249,11 +245,7 @@ describe('safeRetry', () => {
       throw { foo: 'bar' }
     }
     const safeFn = safeRetry(fn)
-    await assert.rejects(safeFn, (err: Error) => {
-      assert.ok(err instanceof Error)
-      assert.strictEqual(err.message, 'Unknown error')
-      return true
-    })
+    await assert.rejects(safeFn, { name: 'Error', message: 'Unknown error' })
   })
 
   test('should pass through successful results', async () => {
