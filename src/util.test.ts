@@ -7,6 +7,7 @@ import {
   generatePipelineFromOmit,
   omitFieldsForUpdate,
   removeUnusedFields,
+  safeRetry,
 } from './util.js'
 
 describe('util', () => {
@@ -215,5 +216,50 @@ describe('util', () => {
         documentKey: { _id: '123' },
       })
     })
+  })
+})
+
+describe('safeRetry', () => {
+  test('should wrap string errors in Error object', async () => {
+    const fn = () => {
+      throw 'string error'
+    }
+    const safeFn = safeRetry(fn)
+    await assert.rejects(safeFn, (err: Error) => {
+      assert.ok(err instanceof Error)
+      assert.strictEqual(err.message, 'string error')
+      return true
+    })
+  })
+
+  test('should pass through Error objects unchanged', async () => {
+    const originalError = new Error('test error')
+    const fn = () => {
+      throw originalError
+    }
+    const safeFn = safeRetry(fn)
+    await assert.rejects(safeFn, (err: Error) => {
+      assert.strictEqual(err, originalError)
+      return true
+    })
+  })
+
+  test('should wrap unknown errors in Error object', async () => {
+    const fn = () => {
+      throw { foo: 'bar' }
+    }
+    const safeFn = safeRetry(fn)
+    await assert.rejects(safeFn, (err: Error) => {
+      assert.ok(err instanceof Error)
+      assert.strictEqual(err.message, 'Unknown error')
+      return true
+    })
+  })
+
+  test('should pass through successful results', async () => {
+    const fn = () => 'success'
+    const safeFn = safeRetry(fn)
+    const result = await safeFn()
+    assert.strictEqual(result, 'success')
   })
 })
