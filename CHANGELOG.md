@@ -1,6 +1,6 @@
 # 0.62.0
 
-- Safely call function, wrapping non-Error exceptions in an Error.
+- Safely call p-retry, wrapping non-Error exceptions in an Error.
 
 # 0.61.1
 
