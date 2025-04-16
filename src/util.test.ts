@@ -8,6 +8,7 @@ import {
   generatePipelineFromOmit,
   omitFieldsForUpdate,
   removeUnusedFields,
+  safeRetry,
 } from './util.js'
 
 type ErrorWithCause = Error & { cause: unknown }
@@ -240,5 +241,66 @@ describe('castError', () => {
     assert.ok(result instanceof Error)
     assert.strictEqual(result.message, 'Unknown error')
     assert.strictEqual(result.cause, unknownError)
+  })
+})
+
+describe('safeRetry', () => {
+  test('should successfully retry and return value', async () => {
+    const result = await safeRetry(() => Promise.resolve(42))
+    assert.strictEqual(result, 42)
+  })
+
+  test('should wrap string errors in Error object', async () => {
+    let thrownError: Error | undefined
+    try {
+      await safeRetry(() => {
+        throw 'custom error'
+      })
+    } catch (err) {
+      thrownError = err as Error
+    }
+    assert.ok(thrownError instanceof Error)
+    assert.strictEqual(thrownError?.message, 'custom error')
+  })
+
+  test('should wrap unknown error types in Error object', async () => {
+    const customError = { code: 500 }
+    let thrownError: ErrorWithCause | undefined
+    try {
+      await safeRetry(() => {
+        throw customError
+      })
+    } catch (err) {
+      thrownError = err as ErrorWithCause
+    }
+    assert.ok(thrownError instanceof Error)
+    assert.strictEqual(thrownError?.message, 'Unknown error')
+    assert.strictEqual(thrownError?.cause, customError)
+  })
+
+  test('should pass through Error objects unchanged', async () => {
+    const originalError = new Error('test error')
+    let thrownError: Error | undefined
+    try {
+      await safeRetry(() => {
+        throw originalError
+      })
+    } catch (err) {
+      thrownError = err as Error
+    }
+    assert.strictEqual(thrownError, originalError)
+  })
+
+  test('should respect retry options', async () => {
+    let attempts = 0
+    const fn = () => {
+      attempts++
+      if (attempts < 3) throw new Error('retry me')
+      return 'success'
+    }
+
+    const result = await safeRetry(fn, { retries: 3 })
+    assert.strictEqual(result, 'success')
+    assert.strictEqual(attempts, 3)
   })
 })
