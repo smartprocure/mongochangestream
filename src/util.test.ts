@@ -245,7 +245,7 @@ describe('castError', () => {
 })
 
 describe('safeRetry', () => {
-  test('should successfully retry and return value', async () => {
+  test('should successfully return resolved promise value', async () => {
     const result = await safeRetry(() => Promise.resolve(42))
     assert.strictEqual(result, 42)
   })
