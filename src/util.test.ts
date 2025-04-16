@@ -3,11 +3,15 @@ import assert from 'node:assert'
 import { describe, test } from 'vitest'
 
 import {
+  castError,
   docToChangeStreamInsert,
   generatePipelineFromOmit,
   omitFieldsForUpdate,
   removeUnusedFields,
+  safeRetry,
 } from './util.js'
+
+type ErrorWithCause = Error & { cause: unknown }
 
 describe('util', () => {
   describe('generatePipelineFromOmit', () => {
@@ -215,5 +219,84 @@ describe('util', () => {
         documentKey: { _id: '123' },
       })
     })
+  })
+})
+
+describe('castError', () => {
+  test('should return the same Error if input is already an Error', () => {
+    const originalError = new Error('test error')
+    const result = castError(originalError)
+    assert.strictEqual(result, originalError)
+  })
+
+  test('should convert string to Error', () => {
+    const result = castError('test error')
+    assert.ok(result instanceof Error)
+    assert.strictEqual(result.message, 'test error')
+  })
+
+  test('should handle unknown error types', () => {
+    const unknownError = { foo: 'bar' }
+    const result = castError(unknownError) as ErrorWithCause
+    assert.ok(result instanceof Error)
+    assert.strictEqual(result.message, 'Unknown error')
+    assert.strictEqual(result.cause, unknownError)
+  })
+})
+
+describe('safeRetry', () => {
+  test('should successfully return resolved promise value', async () => {
+    const result = await safeRetry(() => Promise.resolve(42))
+    assert.strictEqual(result, 42)
+  })
+
+  test('should wrap string errors in Error object', async () => {
+    let thrownError: Error | undefined
+    try {
+      await safeRetry(
+        () => {
+          throw 'custom error'
+        },
+        { retries: 0 }
+      )
+    } catch (err) {
+      thrownError = err as Error
+    }
+    assert.ok(thrownError instanceof Error)
+    assert.strictEqual(thrownError?.message, 'custom error')
+  })
+
+  test('should wrap unknown error types in Error object', async () => {
+    const customError = { code: 500 }
+    let thrownError: ErrorWithCause | undefined
+    try {
+      await safeRetry(
+        () => {
+          throw customError
+        },
+        { retries: 0 }
+      )
+    } catch (err) {
+      thrownError = err as ErrorWithCause
+    }
+    assert.ok(thrownError instanceof Error)
+    assert.strictEqual(thrownError?.message, 'Unknown error')
+    assert.strictEqual(thrownError?.cause, customError)
+  })
+
+  test('should pass through Error objects unchanged', async () => {
+    const originalError = new Error('test error')
+    let thrownError: Error | undefined
+    try {
+      await safeRetry(
+        () => {
+          throw originalError
+        },
+        { retries: 0 }
+      )
+    } catch (err) {
+      thrownError = err as Error
+    }
+    assert.strictEqual(thrownError, originalError)
   })
 })

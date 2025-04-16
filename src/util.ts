@@ -7,6 +7,7 @@ import {
   MongoServerError,
 } from 'mongodb'
 import { map, type Node, walkEach } from 'obj-walker'
+import retry, { type Options } from 'p-retry'
 
 import type { CursorError, JSONSchema } from './types.js'
 
@@ -197,4 +198,34 @@ export const renameKeys = (doc: Document, keys: Record<string, string>) => {
       renameKey(doc, key, newKey)
     }
   }
+}
+
+/**
+ * Wrap non-Error exceptions in an Error.
+ */
+export const castError = (err: unknown): Error => {
+  if (err instanceof Error) {
+    return err
+  }
+  if (typeof err === 'string') {
+    return new Error(err)
+  }
+  return new Error('Unknown error', { cause: err })
+}
+
+/**
+ * Safely call retry, wrapping non-Error exceptions in an Error.
+ */
+export const safeRetry = <T>(
+  fn: () => PromiseLike<T> | T,
+  options?: Options
+) => {
+  const input = async () => {
+    try {
+      return await fn()
+    } catch (err) {
+      throw castError(err)
+    }
+  }
+  return retry(input, options)
 }

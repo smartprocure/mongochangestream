@@ -12,7 +12,7 @@ import {
 } from 'mongodb'
 import * as mongodb from 'mongodb'
 import ms from 'ms'
-import retry, { type Options as RetryOptions } from 'p-retry'
+import { type Options as RetryOptions } from 'p-retry'
 import {
   batchQueue,
   defer,
@@ -47,6 +47,7 @@ import {
   getCollectionKey,
   omitFieldsForUpdate,
   removeUnusedFields,
+  safeRetry,
   setDefaults,
   when,
 } from './util.js'
@@ -260,7 +261,7 @@ export function initSync<ExtendedEvents extends EventEmitter.ValidEventTypes>(
         // Process batch of records with retries.
         // NOTE: processRecords could mutate records.
         try {
-          await retry(() => processRecords(records), {
+          await safeRetry(() => processRecords(records), {
             ...retryOptions,
             signal: retryController.signal,
           })
@@ -448,7 +449,7 @@ export function initSync<ExtendedEvents extends EventEmitter.ValidEventTypes>(
         // NOTE: processRecords could mutate records.
         try {
           if (records.length > 0) {
-            await retry(() => processRecords(records), {
+            await safeRetry(() => processRecords(records), {
               ...retryOptions,
               signal: retryController.signal,
             })
