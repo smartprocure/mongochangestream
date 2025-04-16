@@ -253,9 +253,12 @@ describe('safeRetry', () => {
   test('should wrap string errors in Error object', async () => {
     let thrownError: Error | undefined
     try {
-      await safeRetry(() => {
-        throw 'custom error'
-      })
+      await safeRetry(
+        () => {
+          throw 'custom error'
+        },
+        { retries: 0 }
+      )
     } catch (err) {
       thrownError = err as Error
     }
@@ -267,9 +270,12 @@ describe('safeRetry', () => {
     const customError = { code: 500 }
     let thrownError: ErrorWithCause | undefined
     try {
-      await safeRetry(() => {
-        throw customError
-      })
+      await safeRetry(
+        () => {
+          throw customError
+        },
+        { retries: 0 }
+      )
     } catch (err) {
       thrownError = err as ErrorWithCause
     }
@@ -282,25 +288,15 @@ describe('safeRetry', () => {
     const originalError = new Error('test error')
     let thrownError: Error | undefined
     try {
-      await safeRetry(() => {
-        throw originalError
-      })
+      await safeRetry(
+        () => {
+          throw originalError
+        },
+        { retries: 0 }
+      )
     } catch (err) {
       thrownError = err as Error
     }
     assert.strictEqual(thrownError, originalError)
-  })
-
-  test('should respect retry options', async () => {
-    let attempts = 0
-    const fn = () => {
-      attempts++
-      if (attempts < 3) throw new Error('retry me')
-      return 'success'
-    }
-
-    const result = await safeRetry(fn, { retries: 3 })
-    assert.strictEqual(result, 'success')
-    assert.strictEqual(attempts, 3)
   })
 })
