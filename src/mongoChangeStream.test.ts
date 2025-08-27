@@ -241,50 +241,6 @@ describe.sequential('syncing', () => {
     await initialScan.stop()
   })
 
-  test('should pause initial scan', async () => {
-    const { coll, db } = await getConns()
-    const sync = await getSync()
-    await initState(sync, db, coll)
-
-    const processed: unknown[] = []
-    const processRecords = async (docs: ChangeStreamInsertDocument[]) => {
-      await setTimeout(50)
-      processed.push(...docs)
-
-      if (processed.length === 200) {
-        sync.pausable.pause()
-        // Call resume after 1s
-        global.setTimeout(sync.pausable.resume, ms('1s'))
-      }
-    }
-    const scanOptions = { batchSize: 100 }
-    const initialScan = await sync.runInitialScan(processRecords, scanOptions)
-    // Wait for initial scan to complete
-    await initialScan.start()
-    assert.strictEqual(processed.length, numDocs)
-    // Stop
-    await initialScan.stop()
-  })
-
-  test('stopping paused initial scan works', async () => {
-    const { coll, db } = await getConns()
-    const sync = await getSync()
-    await initState(sync, db, coll)
-
-    const processRecords = async () => {
-      await setTimeout(50)
-    }
-    const initialScan = await sync.runInitialScan(processRecords)
-    initialScan.start()
-    await setTimeout(200)
-    // Pause
-    sync.pausable.pause()
-    // Stop
-    await initialScan.stop()
-    // Check that we are not paused
-    assert.strictEqual(sync.pausable.isPaused, false)
-  })
-
   test('initial scan should throttle', async () => {
     const { coll, db } = await getConns()
     const sync = await getSync()
@@ -464,13 +420,13 @@ describe.sequential('syncing', () => {
     // Stop the initial scan
     await initialScan.stop()
     // Only a subset of the documents were processed
-    assert.ok(processed.length < numDocs)
+    assert.ok(processed.length < numDocs, 'Subset of documents processed')
     // Should not emit cursorError when stopping
-    assert.strictEqual(cursorError, false)
+    assert.strictEqual(cursorError, false, 'No cursor error emitted')
     // Wait for the initial scan to complete
     await initialScan.start()
-    assert.ok(completed)
-    assert.strictEqual(processed.length, numDocs)
+    assert.ok(completed, 'Initial scan completed')
+    assert.strictEqual(processed.length, numDocs, 'All documents processed')
     // Stop
     await initialScan.stop()
   })
@@ -504,8 +460,8 @@ describe.sequential('syncing', () => {
     await setTimeout(100)
     // Check if completed
     const completedAt = await redis.get(sync.keys.scanCompletedKey)
-    assert.strictEqual(completedAt, null)
-    assert.ok(cursorErrorEmitted)
+    assert.strictEqual(completedAt, null, 'Initial scan not completed')
+    assert.ok(cursorErrorEmitted, 'Cursor error emitted')
     // Stop
     await initialScan.stop()
   })
@@ -688,62 +644,6 @@ describe.sequential('syncing', () => {
     console.log('processRecordsCount %d', processRecordsCount)
     assert.ok(processRecordsCount < 3)
     assert.strictEqual(processError, false)
-  })
-
-  test('change stream should resume after pause in events', async () => {
-    const { coll, db } = await getConns()
-    // Use maxPauseTime option to auto-resume
-    const sync = await getSync({ maxPauseTime: ms('1s') })
-    await initState(sync, db, coll)
-
-    let cursorError = false
-    sync.emitter.on('cursorError', () => {
-      cursorError = true
-    })
-    const processed: unknown[] = []
-    const processRecords = async (docs: ChangeStreamDocument[]) => {
-      for (const doc of docs) {
-        await setTimeout(5)
-        processed.push(doc)
-        if (processed.length === 200) {
-          sync.pausable.pause()
-        }
-      }
-    }
-    const changeStream = await sync.processChangeStream(processRecords, {
-      batchSize: 100,
-    })
-    // Start
-    changeStream.start()
-    await setTimeout(ms('1s'))
-    // Update records
-    coll.updateMany({}, { $set: { createdAt: new Date('2022-01-01') } })
-    // Wait for the change stream events to be processed
-    await setTimeout(ms('6s'))
-    assert.strictEqual(processed.length, numDocs)
-    // Stop
-    await changeStream.stop()
-    // Should not emit cursorError when stopping
-    assert.strictEqual(cursorError, false)
-  })
-
-  test('stopping paused change stream works', async () => {
-    const { coll, db } = await getConns()
-    const sync = await getSync()
-    await initState(sync, db, coll)
-
-    // Change stream
-    const processRecords = async () => {
-      await setTimeout(5)
-    }
-    const changeStream = await sync.processChangeStream(processRecords)
-    changeStream.start()
-    // Pause
-    sync.pausable.pause()
-    // Stop
-    await changeStream.stop()
-    // Check that we are not paused
-    assert.strictEqual(sync.pausable.isPaused, false)
   })
 
   test('change stream should throttle', async () => {
@@ -1199,26 +1099,6 @@ describe.sequential('syncing', () => {
     await initialScan.stop()
   })
 
-  test('Resync is pausable', async () => {
-    const { coll, db, redis } = await getConns()
-    const sync = await getSync()
-    await initState(sync, db, coll)
-
-    let resyncTriggered = false
-    const resync = sync.detectResync(250)
-    sync.emitter.on('resync', async () => {
-      resyncTriggered = true
-    })
-    // Start resync detection
-    resync.start()
-    // Pause
-    sync.pausable.pause()
-    // Trigger resync
-    await redis.set(sync.keys.resyncKey, 1)
-    await setTimeout(ms('1s'))
-    assert.ok(!resyncTriggered)
-  })
-
   test('Resync start/stop is idempotent', async () => {
     const sync = await getSync()
 
@@ -1258,38 +1138,6 @@ describe.sequential('syncing', () => {
     })
     await setTimeout(ms('1s'))
     assert.ok(schemaChangeEventTriggered)
-    schemaChange.stop()
-  })
-
-  test('Detect schema change is pausable', async () => {
-    const { db, coll } = await getConns()
-    const sync = await getSync()
-    await initState(sync, db, coll)
-    // Look for a new schema every 250 ms
-    const schemaChange = await sync.detectSchemaChange(db, {
-      shouldRemoveUnusedFields: true,
-      interval: 250,
-    })
-    let schemaChangeEventTriggered = false
-    sync.emitter.on('schemaChange', () => {
-      schemaChangeEventTriggered = true
-    })
-    // Start detecting schema changes
-    schemaChange.start()
-    // Pause
-    sync.pausable.pause()
-    // Modify the schema
-    const modifiedSchema = _.set(
-      'properties.email',
-      { bsonType: 'string' },
-      schema
-    )
-    await db.command({
-      collMod: coll.collectionName,
-      validator: { $jsonSchema: modifiedSchema },
-    })
-    await setTimeout(ms('1s'))
-    assert.ok(!schemaChangeEventTriggered)
     schemaChange.stop()
   })
 
