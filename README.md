@@ -99,8 +99,7 @@ determine if an oplog entry is no longer present and resumption of a change
 stream from a previous point is not possible.
 
 It is recommended that you run a periodic check (e.g., every minute) to determine
-the health of the destination database that data is being synced to. If an issue
-is detected use the `pausable` API to `pause` and `resume` all syncing operations.
+the health of the destination database that data is being synced to.
 
 ## Companion Libraries
 

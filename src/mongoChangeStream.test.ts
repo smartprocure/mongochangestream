@@ -139,11 +139,17 @@ describe.sequential('syncing', () => {
     const initialScan = await sync.runInitialScan(processRecords, scanOptions)
     // Wait for initial scan to complete
     await initialScan.start()
-    assert.strictEqual(processed.length, numDocs)
+    assert.strictEqual(processed.length, numDocs, 'processed all documents')
     // Check that Redis keys are set
-    assert.ok(await redis.get(sync.keys.lastScanIdKey))
-    assert.ok(await redis.get(sync.keys.lastScanProcessedAtKey))
-    assert.ok(await redis.get(sync.keys.scanCompletedKey))
+    assert.ok(await redis.get(sync.keys.lastScanIdKey), 'lastScanIdKey set')
+    assert.ok(
+      await redis.get(sync.keys.lastScanProcessedAtKey),
+      'lastScanProcessedAtKey set'
+    )
+    assert.ok(
+      await redis.get(sync.keys.scanCompletedKey),
+      'scanCompletedKey set'
+    )
     // Stop
     await initialScan.stop()
   })
@@ -171,7 +177,7 @@ describe.sequential('syncing', () => {
     const initialScan = await sync.runInitialScan(processRecords)
     // Wait for initial scan to complete
     await initialScan.start()
-    assert.strictEqual(processErrorCount, 1)
+    assert.strictEqual(processErrorCount, 1, 'processError emitted once')
     // Stop
     await initialScan.stop()
   })
@@ -206,8 +212,8 @@ describe.sequential('syncing', () => {
     // Stop
     await initialScan.stop()
     console.log('processRecordsCount %d', processRecordsCount)
-    assert.ok(processRecordsCount < 3)
-    assert.strictEqual(processError, false)
+    assert.ok(processRecordsCount < 3, 'retries aborted')
+    assert.strictEqual(processError, false, 'no processError emitted')
   })
 
   test('should retry initial scan', async () => {
@@ -234,9 +240,9 @@ describe.sequential('syncing', () => {
     const initialScan = await sync.runInitialScan(processRecords, { batchSize })
     // Wait for initial scan to complete
     await initialScan.start()
-    assert.strictEqual(processed.length, numDocs)
+    assert.strictEqual(processed.length, numDocs, 'processed all documents')
     // Expect one extra call to processRecords
-    assert.strictEqual(counter, numDocs / batchSize + 1)
+    assert.strictEqual(counter, numDocs / batchSize + 1, 'retry occurred')
     // Stop
     await initialScan.stop()
   })
@@ -265,10 +271,16 @@ describe.sequential('syncing', () => {
     })
     // Wait for initial scan to complete
     await initialScan.start()
-    assert.strictEqual(processed.length, numDocs)
-    assert.ok(stats.itemsPerSec > 0 && stats.itemsPerSec < 250)
-    assert.ok(stats.bytesPerSec > 0 && stats.bytesPerSec < 40000)
-    assert.deepEqual(lastFlush, { batchSize: 100 })
+    assert.strictEqual(processed.length, numDocs, 'processed all documents')
+    assert.ok(
+      stats.itemsPerSec > 0 && stats.itemsPerSec < 250,
+      'itemsPerSec throttled'
+    )
+    assert.ok(
+      stats.bytesPerSec > 0 && stats.bytesPerSec < 40000,
+      'bytesPerSec throttled'
+    )
+    assert.deepEqual(lastFlush, { batchSize: 100 }, 'lastFlush correct')
     // Stop
     await initialScan.stop()
   })
@@ -299,8 +311,16 @@ describe.sequential('syncing', () => {
     // Wait for initial scan to complete
     await Promise.all([initialScan.start(), initialScan2.start()])
     // Assertions
-    assert.strictEqual(processed.v1.length, numDocs)
-    assert.strictEqual(processed.v2.length, numDocs)
+    assert.strictEqual(
+      processed.v1.length,
+      numDocs,
+      'v1 processed all documents'
+    )
+    assert.strictEqual(
+      processed.v2.length,
+      numDocs,
+      'v2 processed all documents'
+    )
     // Stop
     await Promise.all([initialScan.stop(), initialScan2.stop()])
   })
@@ -341,7 +361,7 @@ describe.sequential('syncing', () => {
     const initialScan = await sync.runInitialScan(processRecords, scanOptions)
     // Wait for initial scan to complete
     await initialScan.start()
-    assert.strictEqual(processed.length, numDocs)
+    assert.strictEqual(processed.length, numDocs, 'processed all documents')
     // Stop
     await initialScan.stop()
   })
@@ -360,8 +380,16 @@ describe.sequential('syncing', () => {
     const initialScan = await sync.runInitialScan(processRecords, scanOptions)
     // Wait for initial scan to complete
     await initialScan.start()
-    assert.strictEqual(documents[0]?.address?.city, undefined)
-    assert.strictEqual(documents[0]?.address?.geo, undefined)
+    assert.strictEqual(
+      documents[0]?.address?.city,
+      undefined,
+      'city field omitted'
+    )
+    assert.strictEqual(
+      documents[0]?.address?.geo,
+      undefined,
+      'geo field omitted'
+    )
     // Stop
     await initialScan.stop()
   })
@@ -387,8 +415,8 @@ describe.sequential('syncing', () => {
     const initialScan = await sync.runInitialScan(processRecords, scanOptions)
     // Wait for initial scan to complete
     await initialScan.start()
-    assert.ok(completed)
-    assert.strictEqual(processed.length, 0)
+    assert.ok(completed, 'initial scan completed')
+    assert.strictEqual(processed.length, 0, 'no documents processed')
     // Stop
     await initialScan.stop()
   })
@@ -495,7 +523,7 @@ describe.sequential('syncing', () => {
     await setTimeout(500)
     // Stop
     await initialScan.stop()
-    assert.ok(documents[0].cityState)
+    assert.ok(documents[0].cityState, 'pipeline field added')
   })
 
   //------- Change Stream -------
@@ -527,14 +555,20 @@ describe.sequential('syncing', () => {
     coll.updateMany({}, { $set: { createdAt: new Date('2022-01-01') } })
     // Wait for the change stream events to be processed
     await setTimeout(ms('6s'))
-    assert.strictEqual(processed.length, numDocs)
+    assert.strictEqual(processed.length, numDocs, 'processed all documents')
     // Check that Redis keys are set
-    assert.ok(await redis.get(sync.keys.changeStreamTokenKey))
-    assert.ok(await redis.get(sync.keys.lastChangeProcessedAtKey))
+    assert.ok(
+      await redis.get(sync.keys.changeStreamTokenKey),
+      'changeStreamTokenKey set'
+    )
+    assert.ok(
+      await redis.get(sync.keys.lastChangeProcessedAtKey),
+      'lastChangeProcessedAtKey set'
+    )
     // Stop
     await changeStream.stop()
     // Should not emit cursorError when stopping
-    assert.strictEqual(cursorError, false)
+    assert.strictEqual(cursorError, false, 'no cursor error when stopping')
   })
 
   test('should retry processing change stream records', async () => {
@@ -570,9 +604,9 @@ describe.sequential('syncing', () => {
     coll.updateMany({}, { $set: { createdAt: new Date('2022-01-01') } })
     // Wait for the change stream events to be processed
     await setTimeout(ms('6s'))
-    assert.strictEqual(processed.length, numDocs)
+    assert.strictEqual(processed.length, numDocs, 'processed all documents')
     // Expect one extra call to processRecords
-    assert.strictEqual(counter, numDocs / batchSize + 1)
+    assert.strictEqual(counter, numDocs / batchSize + 1, 'retry occurred')
     // Stop
     await changeStream.stop()
   })
@@ -604,7 +638,7 @@ describe.sequential('syncing', () => {
     coll.updateMany({}, { $set: { createdAt: new Date('2022-01-01') } })
     // Wait for the change stream events to be processed
     await setTimeout(ms('6s'))
-    assert.strictEqual(processErrorCount, 1)
+    assert.strictEqual(processErrorCount, 1, 'processError emitted once')
     // Stop
     await changeStream.stop()
   })
@@ -642,8 +676,8 @@ describe.sequential('syncing', () => {
     // Stop
     await changeStream.stop()
     console.log('processRecordsCount %d', processRecordsCount)
-    assert.ok(processRecordsCount < 3)
-    assert.strictEqual(processError, false)
+    assert.ok(processRecordsCount < 3, 'retries aborted')
+    assert.strictEqual(processError, false, 'no processError emitted')
   })
 
   test('change stream should throttle', async () => {
@@ -684,10 +718,16 @@ describe.sequential('syncing', () => {
     )
     // Wait for the change stream events to be processed
     await setTimeout(ms('8s'))
-    assert.strictEqual(processed.length, numDocs)
-    assert.ok(stats.itemsPerSec > 0 && stats.itemsPerSec < 200)
-    assert.ok(stats.bytesPerSec > 0 && stats.bytesPerSec < 80000)
-    assert.deepEqual(lastFlush, { batchSize: 100 })
+    assert.strictEqual(processed.length, numDocs, 'processed all documents')
+    assert.ok(
+      stats.itemsPerSec > 0 && stats.itemsPerSec < 200,
+      'itemsPerSec throttled'
+    )
+    assert.ok(
+      stats.bytesPerSec > 0 && stats.bytesPerSec < 80000,
+      'bytesPerSec throttled'
+    )
+    assert.deepEqual(lastFlush, { batchSize: 100 }, 'lastFlush correct')
     // Stop
     await changeStream.stop()
   })
@@ -714,7 +754,7 @@ describe.sequential('syncing', () => {
     coll.updateMany({}, { $set: { createdAt: new Date('2022-01-01') } })
     // Wait for the change stream events to be processed
     await setTimeout(ms('6s'))
-    assert.strictEqual(processed.length, numDocs)
+    assert.strictEqual(processed.length, numDocs, 'processed all documents')
     // Stop
     await changeStream.stop()
   })
@@ -755,16 +795,29 @@ describe.sequential('syncing', () => {
     // Wait for the change stream events to be processed
     await setTimeout(ms('2s'))
     // Assertions
-    assert.strictEqual(documents[0].fullDocument.address.city, undefined)
-    assert.strictEqual(documents[0].fullDocument.address.geo, undefined)
+    assert.strictEqual(
+      documents[0].fullDocument.address.city,
+      undefined,
+      'city field omitted'
+    )
+    assert.strictEqual(
+      documents[0].fullDocument.address.geo,
+      undefined,
+      'geo field omitted'
+    )
     const fields = ['address.city', 'address.geo.lat']
     for (const field of fields) {
       assert.strictEqual(
         documents[0].updateDescription.updatedFields[field],
-        undefined
+        undefined,
+        `${field} omitted from updatedFields`
       )
     }
-    assert.deepEqual(documents[0].updateDescription.removedFields, [])
+    assert.deepEqual(
+      documents[0].updateDescription.removedFields,
+      [],
+      'removedFields empty'
+    )
     // Stop
     await changeStream.stop()
   })
@@ -800,15 +853,25 @@ describe.sequential('syncing', () => {
     // Wait for the change stream events to be processed
     await setTimeout(ms('2s'))
     // Assertions
-    assert.strictEqual(documents[0].fullDocument.address.geo.long, 25)
-    assert.strictEqual(documents[0].fullDocument.address.geo.lat, undefined)
+    assert.strictEqual(
+      documents[0].fullDocument.address.geo.long,
+      25,
+      'long field preserved'
+    )
+    assert.strictEqual(
+      documents[0].fullDocument.address.geo.lat,
+      undefined,
+      'lat field omitted'
+    )
     assert.strictEqual(
       documents[0].updateDescription.updatedFields['address.geo'].long,
-      25
+      25,
+      'long field in updatedFields'
     )
     assert.strictEqual(
       documents[0].updateDescription.updatedFields['address.geo'].lat,
-      undefined
+      undefined,
+      'lat field omitted from updatedFields'
     )
     // Stop
     await changeStream.stop()
@@ -845,10 +908,15 @@ describe.sequential('syncing', () => {
     // Wait for the change stream events to be processed
     await setTimeout(ms('2s'))
     // Assertions
-    assert.strictEqual(documents[0].fullDocument.address, undefined)
+    assert.strictEqual(
+      documents[0].fullDocument.address,
+      undefined,
+      'address field omitted'
+    )
     assert.strictEqual(
       documents[0].updateDescription.updatedFields.address,
-      undefined
+      undefined,
+      'address omitted from updatedFields'
     )
     // Stop
     await changeStream.stop()
@@ -884,7 +952,11 @@ describe.sequential('syncing', () => {
     await coll.insertOne(genUser())
     // Wait for the change stream events to be processed
     await setTimeout(ms('2s'))
-    assert.deepEqual(_.uniq(operations), ['insert'])
+    assert.deepEqual(
+      _.uniq(operations),
+      ['insert'],
+      'only insert operations processed'
+    )
     // Stop
     await changeStream.stop()
   })
@@ -911,7 +983,7 @@ describe.sequential('syncing', () => {
     // Wait for some change stream events to be processed
     await setTimeout(ms('2s'))
     // Only a subset of the documents were processed
-    assert.ok(processed.length < numDocs)
+    assert.ok(processed.length < numDocs, 'subset processed before stop')
     // Stop
     await changeStream.stop()
     // Resume change stream
@@ -919,7 +991,11 @@ describe.sequential('syncing', () => {
     // Wait for all documents to be processed
     await setTimeout(ms('5s'))
     // All change stream docs were processed
-    assert.strictEqual(processed.length, numDocs)
+    assert.strictEqual(
+      processed.length,
+      numDocs,
+      'all documents processed after resume'
+    )
     await changeStream.stop()
   })
 
@@ -948,7 +1024,10 @@ describe.sequential('syncing', () => {
     // Let change stream connect
     await setTimeout(ms('1s'))
 
-    assert.ok(missingOplogEntry(cursorError.error))
+    assert.ok(
+      missingOplogEntry(cursorError.error),
+      'invalid oplog entry detected'
+    )
     await changeStream.stop()
   })
 
@@ -974,7 +1053,10 @@ describe.sequential('syncing', () => {
     // Let change stream connect
     await setTimeout(ms('1s'))
 
-    assert.ok(missingOplogEntry(cursorError.error))
+    assert.ok(
+      missingOplogEntry(cursorError.error),
+      'missing oplog entry detected'
+    )
     await changeStream.stop()
   })
 
@@ -999,7 +1081,11 @@ describe.sequential('syncing', () => {
     // Let change stream connect
     await setTimeout(ms('1s'))
 
-    assert.strictEqual(cursorError, false)
+    assert.strictEqual(
+      cursorError,
+      false,
+      'no cursor error with empty collection'
+    )
     await changeStream.stop()
   })
 
@@ -1031,7 +1117,7 @@ describe.sequential('syncing', () => {
     // The resume token should initially be null, since we ran `initState`
     // above.
     const token = await getCurrentToken()
-    assert.equal(token, null)
+    assert.equal(token, null, 'initial token is null')
 
     const changeStream = await sync.processChangeStream(processRecords, {
       timeout: ms('5s'),
@@ -1094,8 +1180,12 @@ describe.sequential('syncing', () => {
 
     // Wait for initial scan to complete
     await setTimeout(ms('5s'))
-    assert.ok(resyncTriggered)
-    assert.strictEqual(processed.length, numDocs)
+    assert.ok(resyncTriggered, 'resync triggered')
+    assert.strictEqual(
+      processed.length,
+      numDocs,
+      'all documents processed after resync'
+    )
     await initialScan.stop()
   })
 
@@ -1137,7 +1227,7 @@ describe.sequential('syncing', () => {
       validator: { $jsonSchema: modifiedSchema },
     })
     await setTimeout(ms('1s'))
-    assert.ok(schemaChangeEventTriggered)
+    assert.ok(schemaChangeEventTriggered, 'schema change event triggered')
     schemaChange.stop()
   })
 
@@ -1161,6 +1251,6 @@ describe.sequential('syncing', () => {
       emitted = x
     })
     sync.emitter.emit('foo', 'bar')
-    assert.strictEqual(emitted, 'bar')
+    assert.strictEqual(emitted, 'bar', 'custom event emitted')
   })
 })
