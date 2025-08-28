@@ -1,3 +1,10 @@
+# 0.63.0
+
+- Breaking change: Removed `pausable`.
+- Don't emit `stats` event for change stream events if no actual records were processed.
+- Ensure that the AbortController can be reset when stopping and starting again.
+- Update deps.
+
 # 0.62.0
 
 - Safely call p-retry, wrapping non-Error exceptions in an Error.

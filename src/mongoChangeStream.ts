@@ -17,7 +17,6 @@ import {
   batchQueue,
   defer,
   type Deferred,
-  pausable,
   type QueueOptions,
 } from 'prom-utils'
 import { fsm, type StateTransitions } from 'simple-machines'
@@ -123,7 +122,6 @@ export function initSync<ExtendedEvents extends EventEmitter.ValidEventTypes>(
     emitter.emit(event, { type: event, ...data })
   }
   const emitStateChange = (change: object) => emit('stateChange', change)
-  const pause = pausable(options.maxPauseTime)
   const toChangeStreamInsert = docToChangeStreamInsert(collection)
   /**
    * Determine if the collection should be resynced by checking for the existence
@@ -145,10 +143,6 @@ export function initSync<ExtendedEvents extends EventEmitter.ValidEventTypes>(
       }
       // Check periodically if the collection should be resynced
       resyncTimer = setInterval(async () => {
-        if (pause.isPaused) {
-          debug('Skipping re-sync check - paused')
-          return
-        }
         if (await shouldResync()) {
           debug('Resync triggered')
           emit('resync', {})
@@ -181,7 +175,7 @@ export function initSync<ExtendedEvents extends EventEmitter.ValidEventTypes>(
     options: QueueOptions & ScanOptions<T> = {}
   ) {
     let deferred: Deferred
-    const retryController = new AbortController()
+    let retryController: AbortController
     let cursor: ReturnType<typeof collection.aggregate>
     const state = fsm(stateTransitions, 'stopped', {
       name: 'runInitialScan',
@@ -242,6 +236,7 @@ export function initSync<ExtendedEvents extends EventEmitter.ValidEventTypes>(
         await state.waitForChange('stopped')
       }
       state.change('starting')
+      retryController = new AbortController()
       deferred = defer()
       // Determine if initial scan has already completed
       const scanCompleted = await redis.get(keys.scanCompletedKey)
@@ -301,7 +296,6 @@ export function initSync<ExtendedEvents extends EventEmitter.ValidEventTypes>(
       while ((doc = await nextChecker.getNext())) {
         debug('Initial scan doc %O', doc)
         await queue.enqueue(toChangeStreamInsert(doc))
-        await pause.maybeBlock()
       }
       // Flush the queue
       await queue.flush()
@@ -347,9 +341,6 @@ export function initSync<ExtendedEvents extends EventEmitter.ValidEventTypes>(
       // Abort retries
       retryController.abort('stopping')
       debug('Retry controller aborted')
-      // Unpause
-      pause.resume()
-      debug('Unpaused')
       // Wait for start fn to finish
       await deferred?.promise
       state.change('stopped')
@@ -381,7 +372,7 @@ export function initSync<ExtendedEvents extends EventEmitter.ValidEventTypes>(
     options: QueueOptions & ChangeStreamOptions<T> = {}
   ) => {
     let deferred: Deferred
-    const retryController = new AbortController()
+    let retryController: AbortController
     let changeStream: ChangeStream
     const state = fsm(stateTransitions, 'stopped', {
       name: 'processChangeStream',
@@ -430,6 +421,7 @@ export function initSync<ExtendedEvents extends EventEmitter.ValidEventTypes>(
       }
       state.change('starting')
 
+      retryController = new AbortController()
       changeStream = await getChangeStream()
       debug('Started change stream')
 
@@ -439,12 +431,7 @@ export function initSync<ExtendedEvents extends EventEmitter.ValidEventTypes>(
         // Each item in `maybeRecords` is either an actual record, or null. Null
         // is a signal that we have reached the end of the change stream and we
         // just need to update the resume token in Redis.
-        const records: DocumentsForOperationTypes<T>[] = []
-        for (const record of maybeRecords) {
-          if (record) {
-            records.push(record)
-          }
-        }
+        const records = _.compact(maybeRecords)
         // Process batch of records with retries.
         // NOTE: processRecords could mutate records.
         try {
@@ -471,12 +458,14 @@ export function initSync<ExtendedEvents extends EventEmitter.ValidEventTypes>(
             emit('processError', { error, name: 'processChangeStream' })
           }
         }
-        // Emit stats
-        emit('stats', {
-          name: 'processChangeStream',
-          stats: queue.getStats(),
-          lastFlush: queue.lastFlush,
-        } as StatsEvent)
+        // Emit stats if there were records
+        if (records.length > 0) {
+          emit('stats', {
+            name: 'processChangeStream',
+            stats: queue.getStats(),
+            lastFlush: queue.lastFlush,
+          } as StatsEvent)
+        }
       }
       // New deferred
       deferred = defer()
@@ -519,7 +508,6 @@ export function initSync<ExtendedEvents extends EventEmitter.ValidEventTypes>(
         }
 
         await queue.enqueue(event)
-        await pause.maybeBlock()
 
         if (nextChecker.errorExists() && !state.is('stopping')) {
           emit('cursorError', {
@@ -556,9 +544,6 @@ export function initSync<ExtendedEvents extends EventEmitter.ValidEventTypes>(
       // Abort retries
       retryController.abort('stopping')
       debug('Retry controller aborted')
-      // Unpause
-      pause.resume()
-      debug('Unpaused')
       // Wait for start fn to finish
       await deferred?.promise
       state.change('stopped')
@@ -635,11 +620,6 @@ export function initSync<ExtendedEvents extends EventEmitter.ValidEventTypes>(
     debug('Previous schema %O', previousSchema)
     // Check for a schema change
     const checkForSchemaChange = async () => {
-      if (pause.isPaused) {
-        debug('Skipping schema change check - paused')
-        return
-      }
-
       const currentSchema = await getCollectionSchema(db).then(
         maybeRemoveUnusedFields
       )
@@ -688,11 +668,5 @@ export function initSync<ExtendedEvents extends EventEmitter.ValidEventTypes>(
     detectResync,
     keys,
     emitter,
-    /**
-     * Pause and resume all syncing functions at once. A call to `stop`
-     * for `runInitialScan` or `processChangeStream` will resume to prevent
-     * hanging.
-     */
-    pausable: pause,
   }
 }
