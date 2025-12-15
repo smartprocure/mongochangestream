@@ -1,3 +1,7 @@
+# 0.64.0
+
+- Bumped dependencies.
+
 # 0.63.0
 
 - Breaking change: Removed `pausable`.
