@@ -13,12 +13,7 @@ import {
 import * as mongodb from 'mongodb'
 import ms from 'ms'
 import { type Options as RetryOptions } from 'p-retry'
-import {
-  batchQueue,
-  defer,
-  type Deferred,
-  type QueueOptions,
-} from 'prom-utils'
+import { batchQueue, defer, type Deferred, type QueueOptions } from 'prom-utils'
 import { fsm, type StateTransitions } from 'simple-machines'
 
 import { safelyCheckNext } from './safelyCheckNext.js'
